@@ -2,10 +2,22 @@
 session_start();
 include('../config/db.php');
 
-// Only Super Admin can access
-if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'suparadmin') {
+// Allow suparadmin, or admin with 'manage_passwords' right
+if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'], ['suparadmin', 'admin'])) {
     header("Location: ../auth/login.php");
     exit();
+}
+if ($_SESSION['role'] === 'admin') {
+    $stmt_chk = $conn->prepare("SELECT rights FROM users WHERE id = ? AND role = 'admin'");
+    $stmt_chk->bind_param("i", $_SESSION['user_id']);
+    $stmt_chk->execute();
+    $row_chk = $stmt_chk->get_result()->fetch_assoc();
+    $stmt_chk->close();
+    $chk_rights = $row_chk && $row_chk['rights'] ? json_decode($row_chk['rights'], true) : null;
+    if (!($chk_rights === null || in_array('manage_passwords', (array)$chk_rights))) {
+        header("Location: ../auth/login.php");
+        exit();
+    }
 }
 
 // Determine dashboard to return to based on 'from' parameter

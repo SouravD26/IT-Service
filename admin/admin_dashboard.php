@@ -10,13 +10,25 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
 
 // Fetch admin name
 $admin_id = $_SESSION['user_id'];
-$stmt = $conn->prepare("SELECT name FROM users WHERE id = ?");
+$stmt = $conn->prepare("SELECT name, rights FROM users WHERE id = ?");
 $stmt->bind_param("i", $admin_id);
 $stmt->execute();
 $result = $stmt->get_result();
 $admin_user = $result->fetch_assoc();
 $admin_name = $admin_user['name'] ?? 'Admin';
+$admin_rights = null;
+if (!empty($admin_user['rights'])) {
+    $decoded = json_decode($admin_user['rights'], true);
+    if (is_array($decoded) && !empty($decoded)) {
+        $admin_rights = $decoded;
+    }
+}
 $stmt->close();
+
+// Returns true if admin has access to the given card key (null = all access)
+function adminCan($key, $rights) {
+    return $rights === null || in_array($key, $rights);
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -153,6 +165,7 @@ $stmt->close();
 
     <div class="row g-4">
 
+        <?php if (adminCan('manage_employees', $admin_rights)): ?>
         <!-- Manage Employees Card -->
         <div class="col-md-6 col-lg-4">
             <div class="card dashboard-card card-employees shadow">
@@ -165,7 +178,9 @@ $stmt->close();
                 </div>
             </div>
         </div>
+        <?php endif; ?>
 
+        <?php if (adminCan('manage_departments', $admin_rights)): ?>
         <!-- Departments Card -->
         <div class="col-md-6 col-lg-4">
             <div class="card dashboard-card card-departments shadow">
@@ -178,7 +193,9 @@ $stmt->close();
                 </div>
             </div>
         </div>
+        <?php endif; ?>
 
+        <?php if (adminCan('view_attendance', $admin_rights)): ?>
         <!-- View Attendance Card -->
         <div class="col-md-6 col-lg-4">
             <div class="card dashboard-card card-attendance shadow">
@@ -191,7 +208,9 @@ $stmt->close();
                 </div>
             </div>
         </div>
+        <?php endif; ?>
 
+        <?php if (adminCan('manual_attendance', $admin_rights)): ?>
         <!-- Manual Attendance Card -->
         <div class="col-md-6 col-lg-4">
             <div class="card dashboard-card card-attendance shadow">
@@ -204,7 +223,9 @@ $stmt->close();
                 </div>
             </div>
         </div>
+        <?php endif; ?>
 
+        <?php if (adminCan('comp_off', $admin_rights)): ?>
         <!-- Comp Off Card -->
         <div class="col-md-6 col-lg-4">
             <div class="card dashboard-card shadow" style="border-left-color: #ffc107;">
@@ -217,7 +238,9 @@ $stmt->close();
                 </div>
             </div>
         </div>
+        <?php endif; ?>
 
+        <?php if (adminCan('export_reports', $admin_rights)): ?>
         <!-- Export Report Card -->
         <div class="col-md-6 col-lg-4">
             <div class="card dashboard-card card-export shadow">
@@ -230,7 +253,9 @@ $stmt->close();
                 </div>
             </div>
         </div>
+        <?php endif; ?>
 
+        <?php if (adminCan('manage_companies', $admin_rights)): ?>
         <!-- Manage Companies Card -->
         <div class="col-md-6 col-lg-4">
             <div class="card dashboard-card card-companies shadow">
@@ -243,7 +268,9 @@ $stmt->close();
                 </div>
             </div>
         </div>
+        <?php endif; ?>
 
+        <?php if (adminCan('manage_shifts', $admin_rights)): ?>
         <!-- Manage Shifts Card -->
         <div class="col-md-6 col-lg-4">
             <div class="card dashboard-card card-shifts shadow">
@@ -256,7 +283,9 @@ $stmt->close();
                 </div>
             </div>
         </div>
+        <?php endif; ?>
 
+        <?php if (adminCan('manage_locations', $admin_rights)): ?>
         <!-- Manage Locations Card -->
         <div class="col-md-6 col-lg-4">
             <div class="card dashboard-card card-locations shadow">
@@ -269,7 +298,9 @@ $stmt->close();
                 </div>
             </div>
         </div>
+        <?php endif; ?>
 
+        <?php if (adminCan('od_management', $admin_rights)): ?>
         <!-- OD Management Card -->
         <div class="col-md-6 col-lg-4">
             <div class="card dashboard-card shadow" style="border-left-color: #ff6b6b;">
@@ -282,7 +313,9 @@ $stmt->close();
                 </div>
             </div>
         </div>
+        <?php endif; ?>
 
+        <?php if (adminCan('gps_restriction', $admin_rights)): ?>
         <!-- GPS Restriction Card -->
         <div class="col-md-6 col-lg-4">
             <div class="card dashboard-card shadow" style="border-left-color: #20c997;">
@@ -295,6 +328,22 @@ $stmt->close();
                 </div>
             </div>
         </div>
+        <?php endif; ?>
+
+        <?php if (adminCan('manage_passwords', $admin_rights)): ?>
+        <!-- Manage Passwords Card -->
+        <div class="col-md-6 col-lg-4">
+            <div class="card dashboard-card shadow" style="border-left-color: #dc3545;">
+                <div class="card-body">
+                    <h5 class="card-title">🔐 Manage Passwords</h5>
+                    <p class="card-text text-muted">Set and change employee login passwords securely.</p>
+                    <div class="card-links">
+                        <a href="manage_passwords.php?from=admin" class="btn btn-danger btn-sm">Manage Passwords</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <?php endif; ?>
 
     </div>
 </div>

@@ -257,7 +257,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['excel_file'])) {
             title: 'Import Complete',
             text: '<?= addslashes($message) ?>',
             confirmButtonText: 'Go to Employees'
-        }).then(() => { window.location.href = 'employees.php'; }); 
+        }).then(() => { window.location.href = 'employees.php'; });
         <?php elseif ($message && $message_type === 'danger'): ?>
         Swal.fire({ icon: 'error', title: 'Error', text: '<?= addslashes($message) ?>' });
         <?php endif; ?>
