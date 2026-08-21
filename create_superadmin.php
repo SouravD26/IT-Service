@@ -8,7 +8,7 @@ include('config/db.php');
 echo "🔐 CREATING SUPERADMIN USER\n";
 echo str_repeat("=", 60) . "\n\n";
 
-$phone = '9830376202';
+$phone = '9748302601';
 $password = 'admin123';
 $name = 'Super Admin';
 $email = 'superadmin@company.com';
@@ -54,7 +54,7 @@ echo "\n" . str_repeat("=", 60) . "\n";
 echo "✅ User ready to login!\n";
 echo "\n📱 LOGIN CREDENTIALS:\n";
 echo "  URL: http://localhost/attendence\n";
-echo "  Phone: 9830376202\n";
+echo "  Phone: 9748302601\n";
 echo "  Password: admin123\n";
 
 ?>

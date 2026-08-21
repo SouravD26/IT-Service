@@ -105,6 +105,7 @@ $login_stmt->close();
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Manage Face Attendance Logins</title>
+    <link rel="icon" type="image/png" href="../assets/images/favicon.png">
     <link rel="stylesheet" href="../assets/css/style.css">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
@@ -151,20 +152,7 @@ $login_stmt->close();
 </head>
 <body>
 
-<nav class="navbar navbar-dark bg-dark navbar-custom" style="min-height: 70px;">
-    <div class="container-fluid position-relative">
-        <div class="navbar-welcome">
-            <span class="text-white">Welcome, <?php echo htmlspecialchars($admin_name); ?></span>
-        </div>
-        <div class="navbar-logo">
-            <img src="../assets/images/logo.png" alt="Company Logo">
-        </div>
-        <div class="navbar-logout">
-            <a href="dashboard.php" class="btn btn-secondary btn-sm me-2">Back to Dashboard</a>
-            <a href="../auth/logout.php" class="btn btn-danger btn-sm">Logout</a>
-        </div>
-    </div>
-</nav>
+<?php include('_navbar.php'); ?>
 
 <div class="container mt-5 mb-5">
     <div class="row">

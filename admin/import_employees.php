@@ -10,6 +10,9 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION[
     exit();
 }
 
+// Maximum number of employees admin/suparadmin are allowed to add. Raise this value if a higher limit is ever needed.
+define('MAX_EMPLOYEES_LIMIT', 10);
+
 // Ensure designation column exists
 $conn->query("ALTER TABLE users ADD COLUMN IF NOT EXISTS designation VARCHAR(100) DEFAULT NULL");
 
@@ -45,6 +48,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['excel_file'])) {
             // Row 1 = headers (Sl.No, Particulars, Dept, Location, Designation, Company, DOJ, Phone No., Offday)
             // Data starts from Row 2 (0-indexed)
 
+            $current_employee_count = (int)($conn->query("SELECT COUNT(*) c FROM users WHERE role = 'employee'")->fetch_assoc()['c']);
+            $limit_blocked = 0;
+
             foreach ($rows as $rowIndex => $row) {
                 // Skip title row (index 0) and header row (index 1)
                 if ($rowIndex < 2) continue;
@@ -53,6 +59,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['excel_file'])) {
                 $rowValues = array_filter(array_map('trim', array_map('strval', $row)));
                 if (empty($rowValues)) {
                     $skipped++;
+                    continue;
+                }
+
+                // Stop importing once the employee cap is reached
+                if ($current_employee_count >= MAX_EMPLOYEES_LIMIT) {
+                    $limit_blocked++;
                     continue;
                 }
 
@@ -125,6 +137,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['excel_file'])) {
 
                 if ($stmt->execute()) {
                     $imported++;
+                    $current_employee_count++;
                 } else {
                     $errors[] = "Row " . ($rowIndex + 1) . " ({$name}): " . $stmt->error;
                     $skipped++;
@@ -132,7 +145,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['excel_file'])) {
                 $stmt->close();
             }
 
-            if ($imported > 0) {
+            if ($limit_blocked > 0) {
+                $message = "Employee limit reached (" . MAX_EMPLOYEES_LIMIT . "). Imported {$imported} employee(s); {$limit_blocked} row(s) were not imported because the limit was reached. Contact the developer to raise this limit.";
+                $message_type = "danger";
+            } elseif ($imported > 0) {
                 $message = "Successfully imported {$imported} employee(s)." . ($skipped > 0 ? " Skipped: {$skipped} row(s)." : "");
                 $message_type = "success";
             } elseif ($skipped > 0) {
@@ -152,6 +168,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['excel_file'])) {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Import Employees</title>
+    <link rel="icon" type="image/png" href="../assets/images/favicon.png">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.all.min.js"></script>
     <style>
@@ -163,12 +180,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['excel_file'])) {
     </style>
 </head>
 <body>
-    <nav class="navbar navbar-dark bg-dark">
-        <div class="container-fluid">
-            <span class="navbar-brand mb-0 h1">&#128229; Import Employees</span>
-            <a href="employees.php" class="btn btn-secondary btn-sm">&#8592; Back to Employees</a>
-        </div>
-    </nav>
+    <?php include('_navbar.php'); ?>
 
     <div class="container mt-4" style="max-width:860px;">
 
@@ -235,13 +247,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['excel_file'])) {
                     </div>
                 <?php endif; ?>
 
+                <?php
+                $__existing_count = (int)($conn->query("SELECT COUNT(*) c FROM users WHERE role = 'employee'")->fetch_assoc()['c']);
+                $__limit_reached = $__existing_count >= MAX_EMPLOYEES_LIMIT;
+                ?>
+                <?php if ($__limit_reached): ?>
+                    <div class="alert alert-danger">&#9888; Employee limit reached (<?= $__existing_count ?> / <?= MAX_EMPLOYEES_LIMIT ?>). Contact the developer to raise this limit before importing more employees.</div>
+                <?php else: ?>
+                    <div class="alert alert-secondary py-2"><?= $__existing_count ?> / <?= MAX_EMPLOYEES_LIMIT ?> employees used. Up to <?= MAX_EMPLOYEES_LIMIT - $__existing_count ?> more can be imported.</div>
+                <?php endif; ?>
+
                 <form method="POST" enctype="multipart/form-data">
                     <div class="mb-3">
                         <label class="form-label fw-semibold">Select Excel File</label>
-                        <input type="file" name="excel_file" class="form-control" accept=".xlsx,.xls" required>
+                        <input type="file" name="excel_file" class="form-control" accept=".xlsx,.xls" required <?= $__limit_reached ? 'disabled' : '' ?>>
                         <div class="form-text">Accepted formats: .xlsx, .xls</div>
                     </div>
-                    <button type="submit" class="btn btn-success px-4">&#128229; Import Employees</button>
+                    <button type="submit" class="btn btn-success px-4" <?= $__limit_reached ? 'disabled' : '' ?>>&#128229; Import Employees</button>
                     <a href="employees.php" class="btn btn-secondary ms-2">Cancel</a>
                 </form>
             </div>

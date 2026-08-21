@@ -1,0 +1,291 @@
+/* ── Modern dashboard design system ── */
+:root {
+    --dm-primary: #3b4fd9;
+    --dm-primary-dark: #1a237e;
+    --dm-primary-light: #6c7ae0;
+    --dm-bg: #f3f5fb;
+    --dm-card-bg: #ffffff;
+    --dm-text: #1e2233;
+    --dm-muted: #6b7280;
+    --dm-radius: 18px;
+    --dm-shadow: 0 4px 24px rgba(26, 35, 126, 0.08);
+    --dm-shadow-hover: 0 14px 34px rgba(26, 35, 126, 0.16);
+}
+
+body.modern-dash {
+    font-family: 'Inter', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background-color: var(--dm-bg);
+    background-image:
+        radial-gradient(circle at 6% 8%, rgba(59, 79, 217, 0.10), transparent 38%),
+        radial-gradient(circle at 94% 16%, rgba(108, 122, 224, 0.12), transparent 34%);
+    background-attachment: fixed;
+    background-repeat: no-repeat;
+}
+
+.modern-dash .navbar-custom,
+.modern-dash nav.navbar-custom {
+    background: linear-gradient(90deg, #1a237e 0%, #283593 100%) !important;
+    font-family: 'Inter', 'Segoe UI', sans-serif;
+}
+
+/* ── Page header ── */
+.dm-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    flex-wrap: wrap;
+    gap: 16px;
+    margin-bottom: 28px;
+}
+.dm-header h1 {
+    font-size: 1.9rem;
+    font-weight: 700;
+    color: var(--dm-text);
+    margin: 0;
+    letter-spacing: -0.02em;
+}
+.dm-header .dm-sub {
+    color: var(--dm-muted);
+    font-size: 0.95rem;
+    margin-top: 4px;
+}
+.dm-header .dm-date {
+    color: var(--dm-muted);
+    font-size: 0.9rem;
+    font-weight: 500;
+    background: var(--dm-card-bg);
+    padding: 8px 16px;
+    border-radius: 999px;
+    box-shadow: var(--dm-shadow);
+}
+
+/* ── KPI stat tiles ── */
+.dm-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+    gap: 18px;
+    margin-bottom: 32px;
+}
+.dm-stat {
+    position: relative;
+    overflow: hidden;
+    background: var(--dm-card-bg);
+    border-radius: var(--dm-radius);
+    padding: 20px 22px;
+    box-shadow: var(--dm-shadow);
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    transition: transform 0.3s cubic-bezier(.2,.8,.2,1), box-shadow 0.3s ease;
+    border: 1px solid rgba(26, 35, 126, 0.06);
+}
+.dm-stat::after {
+    content: "";
+    position: absolute;
+    top: -26px; right: -26px;
+    width: 90px; height: 90px;
+    border-radius: 50%;
+    opacity: 0.06;
+    transition: transform 0.4s ease, opacity 0.4s ease;
+}
+.dm-stat:hover {
+    transform: translateY(-5px);
+}
+.dm-stat:hover::after {
+    transform: scale(1.25);
+    opacity: 0.12;
+}
+.dm-stat .dm-stat-icon {
+    width: 54px;
+    height: 54px;
+    border-radius: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 25px;
+    flex-shrink: 0;
+    transition: transform 0.3s cubic-bezier(.2,.8,.2,1);
+}
+.dm-stat:hover .dm-stat-icon {
+    transform: rotate(-6deg) scale(1.08);
+}
+.dm-stat .dm-stat-value {
+    font-size: 1.7rem;
+    font-weight: 800;
+    color: var(--dm-text);
+    line-height: 1.15;
+    letter-spacing: -0.02em;
+}
+.dm-stat .dm-stat-label {
+    font-size: 0.78rem;
+    color: var(--dm-muted);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-top: 2px;
+}
+.dm-stat.c-blue   { box-shadow: var(--dm-shadow); }
+.dm-stat.c-blue:hover   { box-shadow: 0 16px 34px -10px rgba(79,70,229,.35); }
+.dm-stat.c-green:hover  { box-shadow: 0 16px 34px -10px rgba(5,150,105,.35); }
+.dm-stat.c-orange:hover { box-shadow: 0 16px 34px -10px rgba(234,88,12,.35); }
+.dm-stat.c-red:hover    { box-shadow: 0 16px 34px -10px rgba(220,38,38,.35); }
+.dm-stat.c-purple:hover { box-shadow: 0 16px 34px -10px rgba(124,58,237,.35); }
+.dm-stat.c-teal:hover   { box-shadow: 0 16px 34px -10px rgba(8,145,178,.35); }
+.dm-stat.c-blue .dm-stat-icon   { background: linear-gradient(135deg, #4f46e5, #6366f1); }
+.dm-stat.c-blue::after          { background: linear-gradient(135deg, #4f46e5, #6366f1); }
+.dm-stat.c-green .dm-stat-icon  { background: linear-gradient(135deg, #059669, #10b981); }
+.dm-stat.c-green::after         { background: linear-gradient(135deg, #059669, #10b981); }
+.dm-stat.c-orange .dm-stat-icon { background: linear-gradient(135deg, #ea580c, #f97316); }
+.dm-stat.c-orange::after        { background: linear-gradient(135deg, #ea580c, #f97316); }
+.dm-stat.c-red .dm-stat-icon    { background: linear-gradient(135deg, #dc2626, #ef4444); }
+.dm-stat.c-red::after           { background: linear-gradient(135deg, #dc2626, #ef4444); }
+.dm-stat.c-purple .dm-stat-icon { background: linear-gradient(135deg, #7c3aed, #a855f7); }
+.dm-stat.c-purple::after        { background: linear-gradient(135deg, #7c3aed, #a855f7); }
+.dm-stat.c-teal .dm-stat-icon   { background: linear-gradient(135deg, #0891b2, #06b6d4); }
+.dm-stat.c-teal::after          { background: linear-gradient(135deg, #0891b2, #06b6d4); }
+
+/* ── Section title ── */
+.modern-dash .dm-section-title {
+    font-family: 'Inter', 'Segoe UI', sans-serif;
+    font-weight: 700;
+    font-size: 1.15rem;
+    color: var(--dm-text);
+    margin: 8px 0 18px;
+    text-align: left;
+}
+
+/* ── Module cards — unique eye-catchy SaaS style ── */
+.modern-dash .dashboard-card {
+    position: relative;
+    overflow: hidden;
+    border: 1px solid rgba(15, 23, 42, 0.06) !important;
+    border-left: 1px solid rgba(15, 23, 42, 0.06) !important;
+    border-radius: 22px !important;
+    box-shadow: var(--dm-shadow) !important;
+    background: var(--dm-card-bg);
+    transition: transform 0.3s cubic-bezier(.2,.8,.2,1), box-shadow 0.3s ease;
+    height: 100%;
+}
+.modern-dash .dashboard-card::before {
+    content: "";
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 5px;
+    background: linear-gradient(90deg, var(--dm-accent-1, #4f46e5), var(--dm-accent-2, #6366f1));
+}
+.modern-dash .dashboard-card::after {
+    content: "";
+    position: absolute;
+    top: -30px; right: -30px;
+    width: 110px; height: 110px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--dm-accent-1, #4f46e5), var(--dm-accent-2, #6366f1));
+    opacity: 0.07;
+    transition: transform 0.4s ease, opacity 0.4s ease;
+}
+.modern-dash .dashboard-card:hover {
+    transform: translateY(-8px);
+    box-shadow: 0 20px 40px -12px var(--dm-glow, rgba(79,70,229,.35)) !important;
+}
+.modern-dash .dashboard-card:hover::after {
+    transform: scale(1.25);
+    opacity: 0.12;
+}
+.modern-dash .dashboard-card .card-body {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    padding: 28px 24px 24px;
+}
+.modern-dash .card-title {
+    font-weight: 700;
+    font-size: 1.05rem;
+    color: var(--dm-text);
+    letter-spacing: -0.01em;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.modern-dash .card-text {
+    font-size: 0.86rem;
+    color: var(--dm-muted);
+    line-height: 1.5;
+    margin-bottom: 18px;
+}
+.modern-dash .card-links {
+    margin-top: auto;
+}
+.modern-dash .card-links a,
+.modern-dash .card-links button {
+    border-radius: 999px !important;
+    font-weight: 600;
+    font-size: 0.85rem;
+    border: none !important;
+    padding: 9px 18px;
+    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.10);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.modern-dash .dashboard-card:hover .card-links a,
+.modern-dash .dashboard-card:hover .card-links button {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(15, 23, 42, 0.16);
+}
+
+/* ── Auto-generated gradient icon badge (see dashboard-cards.js) ── */
+.dm-icon-badge {
+    width: 50px;
+    height: 50px;
+    min-width: 50px;
+    border-radius: 15px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
+    margin-bottom: 16px;
+    transition: transform 0.3s cubic-bezier(.2,.8,.2,1);
+    box-shadow: 0 8px 16px -4px var(--dm-glow, rgba(79,70,229,.35));
+}
+.modern-dash .dashboard-card:hover .dm-icon-badge {
+    transform: rotate(-6deg) scale(1.1);
+}
+.dm-badge-blue   { background: linear-gradient(135deg, #4f46e5, #6366f1); --dm-accent-1:#4f46e5; --dm-accent-2:#818cf8; --dm-glow: rgba(79,70,229,.35); }
+.dm-badge-green  { background: linear-gradient(135deg, #059669, #10b981); --dm-accent-1:#059669; --dm-accent-2:#34d399; --dm-glow: rgba(5,150,105,.35); }
+.dm-badge-purple { background: linear-gradient(135deg, #7c3aed, #a855f7); --dm-accent-1:#7c3aed; --dm-accent-2:#c084fc; --dm-glow: rgba(124,58,237,.35); }
+.dm-badge-orange { background: linear-gradient(135deg, #ea580c, #f97316); --dm-accent-1:#ea580c; --dm-accent-2:#fb923c; --dm-glow: rgba(234,88,12,.35); }
+.dm-badge-pink   { background: linear-gradient(135deg, #db2777, #ec4899); --dm-accent-1:#db2777; --dm-accent-2:#f472b6; --dm-glow: rgba(219,39,119,.35); }
+.dm-badge-teal   { background: linear-gradient(135deg, #0891b2, #06b6d4); --dm-accent-1:#0891b2; --dm-accent-2:#22d3ee; --dm-glow: rgba(8,145,178,.35); }
+.dm-badge-yellow { background: linear-gradient(135deg, #ca8a04, #eab308); --dm-accent-1:#ca8a04; --dm-accent-2:#facc15; --dm-glow: rgba(202,138,4,.35); }
+.dm-badge-red    { background: linear-gradient(135deg, #dc2626, #ef4444); --dm-accent-1:#dc2626; --dm-accent-2:#f87171; --dm-glow: rgba(220,38,38,.35); }
+
+/* Pass the accent CSS vars from the badge up to the card so ::before/::after/hover-glow can use them */
+.modern-dash .dashboard-card:has(.dm-badge-blue)   { --dm-accent-1:#4f46e5; --dm-accent-2:#818cf8; --dm-glow: rgba(79,70,229,.35); }
+.modern-dash .dashboard-card:has(.dm-badge-green)  { --dm-accent-1:#059669; --dm-accent-2:#34d399; --dm-glow: rgba(5,150,105,.35); }
+.modern-dash .dashboard-card:has(.dm-badge-purple) { --dm-accent-1:#7c3aed; --dm-accent-2:#c084fc; --dm-glow: rgba(124,58,237,.35); }
+.modern-dash .dashboard-card:has(.dm-badge-orange) { --dm-accent-1:#ea580c; --dm-accent-2:#fb923c; --dm-glow: rgba(234,88,12,.35); }
+.modern-dash .dashboard-card:has(.dm-badge-pink)   { --dm-accent-1:#db2777; --dm-accent-2:#f472b6; --dm-glow: rgba(219,39,119,.35); }
+.modern-dash .dashboard-card:has(.dm-badge-teal)   { --dm-accent-1:#0891b2; --dm-accent-2:#22d3ee; --dm-glow: rgba(8,145,178,.35); }
+.modern-dash .dashboard-card:has(.dm-badge-yellow) { --dm-accent-1:#ca8a04; --dm-accent-2:#facc15; --dm-glow: rgba(202,138,4,.35); }
+.modern-dash .dashboard-card:has(.dm-badge-red)    { --dm-accent-1:#dc2626; --dm-accent-2:#f87171; --dm-glow: rgba(220,38,38,.35); }
+
+/* Fallback for browsers without :has() support — JS also stamps the accent class directly on the card */
+.modern-dash .dashboard-card.dm-accent-blue   { --dm-accent-1:#4f46e5; --dm-accent-2:#818cf8; --dm-glow: rgba(79,70,229,.35); }
+.modern-dash .dashboard-card.dm-accent-green  { --dm-accent-1:#059669; --dm-accent-2:#34d399; --dm-glow: rgba(5,150,105,.35); }
+.modern-dash .dashboard-card.dm-accent-purple { --dm-accent-1:#7c3aed; --dm-accent-2:#c084fc; --dm-glow: rgba(124,58,237,.35); }
+.modern-dash .dashboard-card.dm-accent-orange { --dm-accent-1:#ea580c; --dm-accent-2:#fb923c; --dm-glow: rgba(234,88,12,.35); }
+.modern-dash .dashboard-card.dm-accent-pink   { --dm-accent-1:#db2777; --dm-accent-2:#f472b6; --dm-glow: rgba(219,39,119,.35); }
+.modern-dash .dashboard-card.dm-accent-teal   { --dm-accent-1:#0891b2; --dm-accent-2:#22d3ee; --dm-glow: rgba(8,145,178,.35); }
+.modern-dash .dashboard-card.dm-accent-yellow { --dm-accent-1:#ca8a04; --dm-accent-2:#facc15; --dm-glow: rgba(202,138,4,.35); }
+.modern-dash .dashboard-card.dm-accent-red    { --dm-accent-1:#dc2626; --dm-accent-2:#f87171; --dm-glow: rgba(220,38,38,.35); }
+
+.modern-dash .alert {
+    border-radius: 16px;
+    border: none;
+    box-shadow: var(--dm-shadow);
+}
+
+@media (max-width: 576px) {
+    .dm-header { flex-direction: column; align-items: flex-start; }
+    .dm-header h1 { font-size: 1.5rem; }
+}

@@ -39,7 +39,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_department'])) {
     $dept_name = htmlspecialchars(trim($_POST['dept_name']));
     
     if (empty($dept_name)) {
-        $message = "Department name is required";
+        $message = "Project name is required";
         $message_type = "danger";
     } else {
         // Check if department already exists
@@ -47,17 +47,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_department'])) {
         $stmt_check->bind_param("s", $dept_name);
         $stmt_check->execute();
         $result_check = $stmt_check->get_result();
-        
+
         if ($result_check->num_rows > 0) {
-            $message = "Department already exists";
+            $message = "Project already exists";
             $message_type = "danger";
         } else {
             // Insert department
             $stmt_insert = $conn->prepare("INSERT INTO departments (name) VALUES (?)");
             $stmt_insert->bind_param("s", $dept_name);
-            
+
             if ($stmt_insert->execute()) {
-                $message = "✓ Department added successfully!";
+                $message = "✓ Project added successfully!";
                 $message_type = "success";
             } else {
                 $message = "Error: " . $stmt_insert->error;
@@ -75,21 +75,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_department']))
     $new_dept = htmlspecialchars(trim($_POST['new_dept']));
     
     if (empty($new_dept)) {
-        $message = "Department name is required";
+        $message = "Project name is required";
         $message_type = "danger";
     } else {
         // Update department name in departments table
         $stmt_update = $conn->prepare("UPDATE departments SET name = ? WHERE name = ?");
         $stmt_update->bind_param("ss", $new_dept, $old_dept);
-        
+
         if ($stmt_update->execute()) {
             // Also update users with this department
             $stmt_users = $conn->prepare("UPDATE users SET department = ? WHERE department = ?");
             $stmt_users->bind_param("ss", $new_dept, $old_dept);
             $stmt_users->execute();
             $stmt_users->close();
-            
-            $message = "✓ Department updated successfully!";
+
+            $message = "✓ Project updated successfully!";
             $message_type = "success";
         } else {
             $message = "Error: " . $stmt_update->error;
@@ -112,15 +112,15 @@ if (isset($_GET['delete_department'])) {
     $stmt_check->close();
     
     if ($row['count'] > 0) {
-        $message = "Cannot delete! " . $row['count'] . " user(s) assigned to this department. Please reassign them first.";
+        $message = "Cannot delete! " . $row['count'] . " user(s) assigned to this project. Please reassign them first.";
         $message_type = "warning";
     } else {
         // Delete from departments table
         $stmt_delete = $conn->prepare("DELETE FROM departments WHERE name = ?");
         $stmt_delete->bind_param("s", $dept_to_delete);
-        
+
         if ($stmt_delete->execute()) {
-            $message = "✓ Department deleted successfully!";
+            $message = "✓ Project deleted successfully!";
             $message_type = "success";
         } else {
             $message = "Error: " . $stmt_delete->error;
@@ -145,7 +145,8 @@ $stmt->close();
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Department Management</title>
+    <title>Project Management</title>
+    <link rel="icon" type="image/png" href="../assets/images/favicon.png">
     <link rel="stylesheet" href="../assets/css/style.css">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
@@ -153,30 +154,22 @@ $stmt->close();
 </head>
 <body>
 
-<nav class="navbar navbar-dark bg-dark">
-    <div class="container-fluid">
-        <span class="navbar-brand mb-0 h1">Attendance System - Admin</span>
-        <div>
-            <a href="<?php echo htmlspecialchars($back_dashboard); ?>" class="btn btn-secondary btn-sm me-2">← Back to Dashboard</a>
-            <a href="../auth/logout.php" class="btn btn-danger btn-sm">Logout</a>
-        </div>
-    </div>
-</nav>
+<?php include('_navbar.php'); ?>
 
 <div class="container mt-5">
     <div class="row">
         <div class="col-md-4">
             <div class="card shadow">
                 <div class="card-header bg-success text-white">
-                    <h5 class="mb-0">➕ Add Department</h5>
+                    <h5 class="mb-0">➕ Add Project</h5>
                 </div>
                 <div class="card-body">
                     <form method="POST">
                         <div class="mb-3">
-                            <label class="form-label">Department Name</label>
-                            <input type="text" name="dept_name" class="form-control" placeholder="Enter department name" required>
+                            <label class="form-label">Project Name</label>
+                            <input type="text" name="dept_name" class="form-control" placeholder="Enter project name" required>
                         </div>
-                        <button type="submit" name="add_department" class="btn btn-success w-100">Add Department</button>
+                        <button type="submit" name="add_department" class="btn btn-success w-100">Add Project</button>
                     </form>
                 </div>
             </div>
@@ -185,17 +178,17 @@ $stmt->close();
         <div class="col-md-8">
             <div class="card shadow">
                 <div class="card-header bg-info text-white">
-                    <h5 class="mb-0">📋 All Departments</h5>
+                    <h5 class="mb-0">📋 All Projects</h5>
                 </div>
                 <div class="card-body">
                     <?php if (empty($departments)) : ?>
-                        <p class="text-muted">No departments found. Add one to get started!</p>
+                        <p class="text-muted">No projects found. Add one to get started!</p>
                     <?php else : ?>
                         <div class="table-responsive">
                             <table class="table table-striped table-hover">
                                 <thead>
                                     <tr>
-                                        <th>Department Name</th>
+                                        <th>Project Name</th>
                                         <th>Actions</th>
                                     </tr>
                                 </thead>
@@ -230,20 +223,20 @@ $stmt->close();
     <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title">Edit Department</h5>
+                <h5 class="modal-title">Edit Project</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <form method="POST">
                 <div class="modal-body">
                     <input type="hidden" name="old_dept" id="old_dept">
                     <div class="mb-3">
-                        <label class="form-label">New Department Name</label>
+                        <label class="form-label">New Project Name</label>
                         <input type="text" name="new_dept" id="new_dept" class="form-control" required>
                     </div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" name="update_department" class="btn btn-warning">Update Department</button>
+                    <button type="submit" name="update_department" class="btn btn-warning">Update Project</button>
                 </div>
             </form>
         </div>
@@ -261,7 +254,7 @@ function confirmDelete(event, dept) {
     event.preventDefault();
     Swal.fire({
         icon: 'warning',
-        title: 'Delete Department?',
+        title: 'Delete Project?',
         text: 'Are you sure you want to delete "' + dept + '"?',
         confirmButtonColor: '#dc3545',
         cancelButtonColor: '#6c757d',
@@ -286,3 +279,4 @@ function confirmDelete(event, dept) {
 
 </body>
 </html>
+

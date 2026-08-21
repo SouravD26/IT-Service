@@ -83,6 +83,7 @@ $result = $stmt->get_result();
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Attendance Records</title>
+    <link rel="icon" type="image/png" href="../assets/images/favicon.png">
     <link rel="stylesheet" href="../assets/css/style.css">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
@@ -123,15 +124,7 @@ $result = $stmt->get_result();
 </head>
 <body>
 
-<nav class="navbar navbar-dark bg-dark">
-    <div class="container-fluid">
-        <span class="navbar-brand mb-0 h1">Attendance System - Attendance Records</span>
-        <div>
-            <a href="<?php echo htmlspecialchars($back_dashboard); ?>" class="btn btn-secondary btn-sm me-2">← Back to Dashboard</a>
-            <a href="../auth/logout.php" class="btn btn-danger btn-sm">Logout</a>
-        </div>
-    </div>
-</nav>
+<?php include('_navbar.php'); ?>
 
 <div class="container-fluid mt-5">
     <h3 class="mb-4">📊 Attendance Records with Selfie Verification</h3>

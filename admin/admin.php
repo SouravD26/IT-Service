@@ -3,13 +3,28 @@ session_start();
 include('../config/db.php');
 
 // Enable authentication check
-if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'suparadmin') {
+if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'suparadmin' && $_SESSION['role'] !== 'admin')) {
     header("Location: ../auth/login.php");
     exit();
 }
 
-// Back dashboard for Super Admin goes to main dashboard
-$back_dashboard = 'dashboard.php';
+// A regular admin may only manage admins if granted the 'manage_admins' right
+if ($_SESSION['role'] === 'admin') {
+    $__uid = (int)$_SESSION['user_id'];
+    $__chk = $conn->prepare("SELECT rights FROM users WHERE id=?");
+    $__chk->bind_param("i", $__uid);
+    $__chk->execute();
+    $__row = $__chk->get_result()->fetch_assoc();
+    $__chk->close();
+    $__rights = !empty($__row['rights']) ? json_decode($__row['rights'], true) : null;
+    if (!is_array($__rights) || !in_array('manage_admins', $__rights)) {
+        header("Location: admin_dashboard.php");
+        exit();
+    }
+}
+
+// Back dashboard depends on role
+$back_dashboard = ($_SESSION['role'] === 'suparadmin') ? 'dashboard.php' : 'admin_dashboard.php';
 
 $message = "";
 $message_type = "";
@@ -63,6 +78,9 @@ $available_rights = [
     'od_management'      => '📍 OD Management',
     'gps_restriction'    => '📡 GPS Restriction',
     'manage_passwords'   => '🔐 Manage Passwords',
+    'salary_slip'        => '💰 Salary Slip',
+    'leave_management'   => '🗓️ Leave Management',
+    'manage_admins'      => '👤 Manage Admins',
 ];
 
 // Handle Add Admin
@@ -204,6 +222,7 @@ $result = $stmt->get_result();
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Admin Management - Attendance System</title>
+    <link rel="icon" type="image/png" href="../assets/images/favicon.png">
     <link rel="stylesheet" href="../assets/css/style.css">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
@@ -236,14 +255,7 @@ $result = $stmt->get_result();
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.all.min.js"></script>
 </head>
 <body>
-    <nav class="navbar navbar-dark bg-dark">
-        <div class="container-fluid">
-            <span class="navbar-brand mb-0 h1">Admin Management</span>
-            <div>
-                <a href="../auth/logout.php" class="btn btn-danger btn-sm">Logout</a>
-            </div>
-        </div>
-    </nav>
+    <?php include('_navbar.php'); ?>
 
     <div class="container mt-5">
         <!-- Toggle Button -->
@@ -583,3 +595,4 @@ $result = $stmt->get_result();
 <?php
 $stmt->close();
 ?>
+

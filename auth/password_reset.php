@@ -2,7 +2,7 @@
 include "../config/db.php";
 
 // Reset admin password
-$phone = '9830376202';
+$phone = '9748302601';
 $new_password = 'admin123';
 $hashed_password = password_hash($new_password, PASSWORD_BCRYPT);
 

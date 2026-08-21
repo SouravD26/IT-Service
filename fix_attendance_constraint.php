@@ -13,6 +13,7 @@ header('Content-Type: text/html; charset=utf-8');
 <html>
 <head>
     <title>Allow Multiple Punches - Fix</title>
+    <link rel="icon" type="image/png" href="assets/images/favicon.png">
     <style>
         body { 
             font-family: Arial, sans-serif; 

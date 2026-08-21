@@ -203,6 +203,7 @@ if (!empty($employees)) {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>OD Management</title>
+    <link rel="icon" type="image/png" href="../assets/images/favicon.png">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <link href="https://cdn.jsdelivr.net/npm/litepicker@latest/dist/litepicker.css" rel="stylesheet">
@@ -336,20 +337,7 @@ if (!empty($employees)) {
 </head>
 <body>
 
-<nav class="navbar navbar-dark bg-dark navbar-custom" style="min-height: 70px;">
-    <div class="container-fluid position-relative">
-        <div class="navbar-welcome">
-            <!-- <span class="text-white">OD Management System</span> -->
-        </div>
-        <div class="navbar-logo">
-            <img src="../assets/images/logo.png" alt="Company Logo" style="height: 100%; width: auto; max-width: 200px;">
-        </div>
-        <div class="navbar-logout">
-            <a href="<?php echo htmlspecialchars($back_dashboard); ?>" class="btn btn-secondary btn-sm me-2">← Back</a>
-            <a href="../auth/logout.php" class="btn btn-danger btn-sm">Logout</a>
-        </div>
-    </div>
-</nav>
+<?php include('_navbar.php'); ?>
 
 <div class="container mt-5 mb-5">
     <h2 class="mb-4 text-center">📍 OD (Out Station Duty) Management</h2>

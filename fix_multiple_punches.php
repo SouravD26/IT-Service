@@ -10,6 +10,7 @@ echo "<!DOCTYPE html>
 <html>
 <head>
     <title>Fix Multiple Punches</title>
+    <link rel='icon' type='image/png' href='assets/images/favicon.png'>
     <style>
         body { font-family: Arial; margin: 40px; background: #f5f5f5; }
         .box { background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); max-width: 600px; }

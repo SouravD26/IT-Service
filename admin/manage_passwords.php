@@ -111,6 +111,7 @@ $result = $stmt->get_result();
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Manage Employee Passwords</title>
+    <link rel="icon" type="image/png" href="../assets/images/favicon.png">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.all.min.js"></script>
@@ -146,15 +147,7 @@ $result = $stmt->get_result();
 </head>
 <body>
 
-<nav class="navbar navbar-dark bg-dark">
-    <div class="container-fluid">
-        <span class="navbar-brand mb-0 h1">Manage Employee Passwords</span>
-        <div>
-            <a href="dashboard.php" class="btn btn-secondary btn-sm me-2">Dashboard</a>
-            <a href="../auth/logout.php" class="btn btn-danger btn-sm">Logout</a>
-        </div>
-    </div>
-</nav>
+<?php include('_navbar.php'); ?>
 
 <div class="container mt-5">
     <?php if ($message): ?>
@@ -447,3 +440,4 @@ $result = $stmt->get_result();
 
 </body>
 </html>
+

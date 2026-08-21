@@ -29,6 +29,28 @@ $stmt->close();
 function adminCan($key, $rights) {
     return $rights === null || in_array($key, $rights);
 }
+
+// Ensure leave_applications table exists (for KPI stats below)
+$conn->query("CREATE TABLE IF NOT EXISTS leave_applications (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    user_id INT NOT NULL,
+    leave_type VARCHAR(100) NOT NULL,
+    start_date DATE NOT NULL, end_date DATE NOT NULL,
+    days_count DECIMAL(5,1) NOT NULL DEFAULT 1,
+    reason TEXT, status ENUM('Pending','Approved','Rejected') DEFAULT 'Pending',
+    admin_notes TEXT, reviewed_by INT, reviewed_at TIMESTAMP NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+)");
+
+// KPI stats (only computed/shown for cards this admin has rights to)
+$stat_total_emp = (int)($conn->query("SELECT COUNT(*) c FROM users WHERE role='employee' AND status='Working'")->fetch_assoc()['c'] ?? 0);
+$stat_present_today = (int)($conn->query("SELECT COUNT(DISTINCT a.user_id) c FROM attendance a JOIN users u ON u.id = a.user_id WHERE a.date = CURDATE() AND a.status IN ('Present','Late') AND u.role='employee'")->fetch_assoc()['c'] ?? 0);
+$stat_on_leave_today = (int)($conn->query("SELECT COUNT(DISTINCT user_id) c FROM leave_applications WHERE status='Approved' AND CURDATE() BETWEEN start_date AND end_date")->fetch_assoc()['c'] ?? 0);
+$stat_pending_leaves = (int)($conn->query("SELECT COUNT(*) c FROM leave_applications WHERE status='Pending'")->fetch_assoc()['c'] ?? 0);
+
+$dm_hour = (int)date('G');
+$dm_greeting = $dm_hour < 12 ? 'Good morning' : ($dm_hour < 17 ? 'Good afternoon' : 'Good evening');
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -36,10 +58,13 @@ function adminCan($key, $rights) {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title class="titel">Admin Dashboard</title>
-    <link rel="icon" type="image/x-icon" href="../assets/images/favicon.ico">
+    <link rel="icon" type="image/png" href="../assets/images/favicon.png">
     <link rel="stylesheet" href="../assets/css/style.css">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../assets/css/dashboard-modern.css">
     <style>
         .dashboard-card {
             border-left: 5px solid;
@@ -130,32 +155,48 @@ function adminCan($key, $rights) {
         }
     </style>
 </head>
-<body>
+<body class="modern-dash">
 
-<nav class="navbar navbar-dark bg-dark navbar-custom" style="min-height: 70px;">
-    <div class="container-fluid position-relative">
-        
-        <!-- Welcome Text (Left) -->
-        <div class="navbar-welcome">
-            <span class="text-white">Welcome, <?php echo htmlspecialchars($admin_name); ?></span>
-        </div>
-
-        <!-- Centered Logo -->
-        <div class="navbar-logo">
-            <img src="../assets/images/logo.png" alt="Company Logo">
-        </div>
-
-        <!-- Logout Button (Right) -->
-        <div class="navbar-logout">
-            <a href="../auth/logout.php" class="btn btn-danger btn-sm">Logout</a>
-        </div>
-        
-    </div>
-</nav>
+<?php include('_navbar.php'); ?>
 
 <div class="container mt-5 mb-5">
+    <div class="dm-header">
+        <div>
+            <h1><?= htmlspecialchars($dm_greeting) ?>, <?= htmlspecialchars($admin_name) ?> 👋</h1>
+            <div class="dm-sub">Here's what's happening across your organization today.</div>
+        </div>
+        <div class="dm-date"><?= date('l, d M Y') ?></div>
+    </div>
+
+    <?php if (adminCan('manage_employees', $admin_rights) || adminCan('view_attendance', $admin_rights) || adminCan('leave_management', $admin_rights)): ?>
+    <div class="dm-stats">
+        <?php if (adminCan('manage_employees', $admin_rights)): ?>
+        <div class="dm-stat c-blue">
+            <div class="dm-stat-icon">👥</div>
+            <div><div class="dm-stat-value"><?= $stat_total_emp ?></div><div class="dm-stat-label">Total Employees</div></div>
+        </div>
+        <?php endif; ?>
+        <?php if (adminCan('view_attendance', $admin_rights)): ?>
+        <div class="dm-stat c-green">
+            <div class="dm-stat-icon">✅</div>
+            <div><div class="dm-stat-value"><?= $stat_present_today ?></div><div class="dm-stat-label">Present Today</div></div>
+        </div>
+        <?php endif; ?>
+        <?php if (adminCan('leave_management', $admin_rights)): ?>
+        <div class="dm-stat c-orange">
+            <div class="dm-stat-icon">🗓️</div>
+            <div><div class="dm-stat-value"><?= $stat_on_leave_today ?></div><div class="dm-stat-label">On Leave Today</div></div>
+        </div>
+        <div class="dm-stat c-red">
+            <div class="dm-stat-icon">⏳</div>
+            <div><div class="dm-stat-value"><?= $stat_pending_leaves ?></div><div class="dm-stat-label">Pending Leave Requests</div></div>
+        </div>
+        <?php endif; ?>
+    </div>
+    <?php endif; ?>
+
     <h3 class="mb-4 text-center">Admin Dashboard</h3>
-    
+
     <!-- System Setup Notice -->
     <div class="alert alert-warning alert-dismissible fade show" role="alert">
         <strong>⚠️ First-Time Setup Required:</strong> If employees are getting "Duplicate entry" errors when trying to punch in multiple times per day, click the button below to run the database setup migration.
@@ -185,10 +226,10 @@ function adminCan($key, $rights) {
         <div class="col-md-6 col-lg-4">
             <div class="card dashboard-card card-departments shadow">
                 <div class="card-body">
-                    <h5 class="card-title">🏢 Manage Departments</h5>
-                    <p class="card-text text-muted">Create and manage departments for organizing employees.</p>
+                    <h5 class="card-title">🏢 Manage Projects</h5>
+                    <p class="card-text text-muted">Create and manage projects for organizing employees.</p>
                     <div class="card-links">
-                        <a href="department.php?from=admin" class="btn btn-success btn-sm">View Departments</a>
+                        <a href="department.php?from=admin" class="btn btn-success btn-sm">View Projects</a>
                     </div>
                 </div>
             </div>
@@ -339,6 +380,51 @@ function adminCan($key, $rights) {
                     <p class="card-text text-muted">Set and change employee login passwords securely.</p>
                     <div class="card-links">
                         <a href="manage_passwords.php?from=admin" class="btn btn-danger btn-sm">Manage Passwords</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <?php endif; ?>
+
+        <?php if (adminCan('salary_slip', $admin_rights)): ?>
+        <!-- Salary Slip Card -->
+        <div class="col-md-6 col-lg-4">
+            <div class="card dashboard-card shadow" style="border-left-color:#6610f2;">
+                <div class="card-body">
+                    <h5 class="card-title">💰 Salary Slip</h5>
+                    <p class="card-text text-muted">Generate and download monthly salary slips for employees with automatic deduction calculations.</p>
+                    <div class="card-links">
+                        <a href="salary_slip.php" class="btn btn-sm" style="background:#6610f2;color:#fff;border-color:#6610f2;">Generate Slips</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <?php endif; ?>
+
+        <?php if (adminCan('leave_management', $admin_rights)): ?>
+        <!-- Leave Management Card -->
+        <div class="col-md-6 col-lg-4">
+            <div class="card dashboard-card shadow" style="border-left-color:#fd7e14;">
+                <div class="card-body">
+                    <h5 class="card-title">🗓️ Leave Management</h5>
+                    <p class="card-text text-muted">Review, approve or reject employee leave applications. Rejected leaves are auto-deducted from salary.</p>
+                    <div class="card-links">
+                        <a href="leave_management.php" class="btn btn-sm" style="background:#fd7e14;color:#fff;border-color:#fd7e14;">Manage Leaves</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <?php endif; ?>
+
+        <?php if (adminCan('manage_admins', $admin_rights)): ?>
+        <!-- Manage Admins Card -->
+        <div class="col-md-6 col-lg-4">
+            <div class="card dashboard-card shadow" style="border-left-color:#ffc107;">
+                <div class="card-body">
+                    <h5 class="card-title">👤 Manage Admins</h5>
+                    <p class="card-text text-muted">Create, edit, and manage other admin accounts in the system.</p>
+                    <div class="card-links">
+                        <a href="admin.php?from=admin" class="btn btn-warning btn-sm">View Admins</a>
                     </div>
                 </div>
             </div>

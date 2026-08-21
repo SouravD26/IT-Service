@@ -83,6 +83,7 @@ if ($result) {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Face Recognition Setup & Guide</title>
+    <link rel="icon" type="image/png" href="../assets/images/favicon.png">
     <link rel="stylesheet" href="../assets/css/style.css">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
@@ -202,15 +203,7 @@ if ($result) {
     </style>
 </head>
 <body>
-    <!-- Navbar -->
-    <nav class="navbar navbar-dark navbar-custom">
-        <div class="container-fluid">
-            <h2 style="color: white; margin: 0;">📸 Face Recognition System Setup</h2>
-            <a href="<?php echo $_SESSION['role'] === 'suparadmin' ? 'dashboard.php' : 'admin_dashboard.php'; ?>" class="btn btn-light btn-sm">
-                <i class="fas fa-arrow-left"></i> Back to Dashboard
-            </a>
-        </div>
-    </nav>
+    <?php include('_navbar.php'); ?>
 
     <div class="container mt-4 mb-5">
         <!-- Table of Contents -->

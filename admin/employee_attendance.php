@@ -81,6 +81,7 @@ foreach ($records as $record) {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Employee Attendance Records</title>
+    <link rel="icon" type="image/png" href="../assets/images/favicon.png">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
@@ -181,15 +182,7 @@ foreach ($records as $record) {
     </style>
 </head>
 <body>
-    <!-- Navbar -->
-    <nav class="navbar navbar-dark">
-        <div class="container-fluid">
-            <a href="../admin/admin_dashboard.php" class="navbar-brand">
-                <i class="fas fa-arrow-left"></i> Admin Dashboard
-            </a>
-            <span class="text-white"><i class="fas fa-user"></i> <?php echo htmlspecialchars($_SESSION['user_name']); ?></span>
-        </div>
-    </nav>
+    <?php include('_navbar.php'); ?>
 
     <div class="container" style="max-width: 900px;">
         <!-- Header Card -->

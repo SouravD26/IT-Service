@@ -12,6 +12,7 @@ include('config/db.php');
 <html>
 <head>
     <title>Verify Multiple Punch Records</title>
+    <link rel="icon" type="image/png" href="assets/images/favicon.png">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
         body { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; padding: 20px; }

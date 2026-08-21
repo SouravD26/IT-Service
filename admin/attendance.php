@@ -98,7 +98,7 @@ $page = min($page, $total_pages);
 $offset = ($page - 1) * $per_page;
 
 // --- Paginated list query ---
-$sql = "SELECT a.id, a.date, a.punch_in, a.punch_out, a.punch_in_location, a.punch_out_location, a.status, a.selfie_punchin, a.selfie_punchout, u.name, u.department
+$sql = "SELECT a.id, a.date, a.punch_in, a.punch_out, a.punch_in_location, a.punch_out_location, a.status, a.selfie_punchin, a.selfie_punchout, u.id AS user_id, u.name, u.department
         FROM attendance a JOIN users u ON a.user_id = u.id" . $where_sql . " ORDER BY a.date DESC, a.punch_in DESC LIMIT ? OFFSET ?";
 $list_params = array_merge($params, [$per_page, $offset]);
 $list_types = $types . "ii";
@@ -115,6 +115,7 @@ $result = $stmt->get_result();
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Attendance Records</title>
+    <link rel="icon" type="image/png" href="../assets/images/favicon.png">
     <link rel="stylesheet" href="../assets/css/style.css">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
@@ -168,15 +169,7 @@ $result = $stmt->get_result();
 </head>
 <body>
 
-<nav class="navbar navbar-dark bg-dark">
-    <div class="container-fluid">
-        <span class="navbar-brand mb-0 h1">Attendance System - Attendance Records</span>
-        <div>
-            <a href="<?php echo htmlspecialchars($back_dashboard); ?>" class="btn btn-secondary btn-sm me-2">← Back to Dashboard</a>
-            <a href="../auth/logout.php" class="btn btn-danger btn-sm">Logout</a>
-        </div>
-    </div>
-</nav>
+<?php include('_navbar.php'); ?>
 
 <div class="container-fluid mt-5">
     <h3 class="mb-4">📊 Attendance Records with Selfie Verification</h3>
@@ -189,9 +182,9 @@ $result = $stmt->get_result();
         <div class="card-body">
             <form method="GET" class="row g-3">
                 <div class="col-md-2">
-                    <label class="form-label">Department</label>
+                    <label class="form-label">Project</label>
                     <select name="dept" class="form-control">
-                        <option value="">All Departments</option>
+                        <option value="">All Projects</option>
                         <?php foreach ($departments as $dept): ?>
                             <option value="<?php echo htmlspecialchars($dept); ?>" <?php echo $filter_dept === $dept ? 'selected' : ''; ?>>
                                 <?php echo htmlspecialchars($dept); ?>
@@ -261,8 +254,9 @@ $result = $stmt->get_result();
                     <table class="table table-striped table-hover table-sm">
                         <thead class="table-dark">
                             <tr>
+                                <th>Picture</th>
                                 <th>Employee Name</th>
-                                <th>Department</th>
+                                <th>Project</th>
                                 <th>Date</th>
                                 <th>Punch In</th>
                                 <th>Punch In Selfie</th>
@@ -275,7 +269,18 @@ $result = $stmt->get_result();
                         </thead>
                         <tbody>
                             <?php while ($row = $result->fetch_assoc()): ?>
+                                <?php
+                                    $emp_photos = glob("../uploads/employee_photos/" . $row['user_id'] . ".*");
+                                    $emp_photo_url = !empty($emp_photos) ? "../uploads/employee_photos/" . basename($emp_photos[0]) : '';
+                                ?>
                                 <tr>
+                                    <td>
+                                        <?php if ($emp_photo_url): ?>
+                                            <img src="<?php echo htmlspecialchars($emp_photo_url); ?>" alt="Photo" style="width:36px;height:36px;border-radius:50%;object-fit:cover;">
+                                        <?php else: ?>
+                                            <i class="fas fa-user-circle text-muted" style="font-size:32px;"></i>
+                                        <?php endif; ?>
+                                    </td>
                                     <td><strong><?php echo htmlspecialchars($row['name']); ?></strong></td>
                                     <td><?php echo htmlspecialchars($row['department'] ?? 'N/A'); ?></td>
                                     <td><?php echo htmlspecialchars($row['date']); ?></td>

@@ -149,6 +149,7 @@ $totals = $totals_res ? $totals_res->fetch_assoc() : ['total' => 0, 'restricted'
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>GPS Attendance Restriction</title>
+    <link rel="icon" type="image/png" href="../assets/images/favicon.png">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.all.min.js"></script>
@@ -180,12 +181,7 @@ $totals = $totals_res ? $totals_res->fetch_assoc() : ['total' => 0, 'restricted'
     </style>
 </head>
 <body>
-    <nav class="navbar navbar-dark bg-dark">
-        <div class="container-fluid">
-            <span class="navbar-brand mb-0 h1">📍 GPS Attendance Restriction</span>
-            <a href="<?= htmlspecialchars($back_dashboard) ?>" class="btn btn-secondary btn-sm">← Back to Dashboard</a>
-        </div>
-    </nav>
+    <?php include('_navbar.php'); ?>
 
     <div class="container mt-4 mb-5" style="max-width:900px;">
 
@@ -521,3 +517,4 @@ $totals = $totals_res ? $totals_res->fetch_assoc() : ['total' => 0, 'restricted'
     </script>
 </body>
 </html>
+

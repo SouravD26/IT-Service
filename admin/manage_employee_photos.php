@@ -211,6 +211,7 @@ if (empty($employees)) {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Manage Employee Photos - Face Recognition</title>
+    <link rel="icon" type="image/png" href="../assets/images/favicon.png">
     <link rel="stylesheet" href="../assets/css/style.css">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
@@ -292,23 +293,7 @@ if (empty($employees)) {
     </style>
 </head>
 <body>
-    <!-- Navbar -->
-    <nav class="navbar navbar-custom">
-        <div class="navbar-welcome">
-            <span style="font-size: 1.1rem;">👤 <?php echo htmlspecialchars($admin_name); ?></span>
-        </div>
-        <div style="flex: 1; text-align: center;">
-            <h2 style="color: white; margin: 0; font-weight: bold;">📸 Manage Employee Photos</h2>
-        </div>
-        <div class="navbar-logout">
-            <a href="../admin/dashboard.php" class="btn btn-sm btn-light">
-                <i class="fas fa-arrow-left"></i> Back to Dashboard
-            </a>
-            <a href="../auth/logout.php" class="btn btn-sm btn-danger">
-                <i class="fas fa-sign-out-alt"></i> Logout
-            </a>
-        </div>
-    </nav>
+    <?php include('_navbar.php'); ?>
 
     <div class="container-fluid mt-4">
         <!-- Message Display -->

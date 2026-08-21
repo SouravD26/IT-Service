@@ -201,6 +201,7 @@ if ($face_employees_result) {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Admin Panel - 🎭 Face Recognition & 📸 Employee Photos</title>
+    <link rel="icon" type="image/png" href="../assets/images/favicon.png">
     <style>
         * {
             margin: 0;
@@ -476,6 +477,7 @@ if ($face_employees_result) {
     </style>
 </head>
 <body>
+    <?php include('_navbar.php'); ?>
     <div class="container">
         <div class="header">
             <h1>🎭 Face Recognition & 📸 Employee Photos Panel</h1>
