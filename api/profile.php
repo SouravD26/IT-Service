@@ -21,4 +21,14 @@ if (!$user) {
     exit;
 }
 
+// Photo is stored on disk as uploads/employee_photos/{id}.{ext} (same lookup
+// employee/dashboard.php uses) — not a DB column, so build a full URL here.
+$photos = glob(__DIR__ . '/../uploads/employee_photos/' . $user['id'] . '.*');
+$user['photo_url'] = null;
+if (!empty($photos)) {
+    $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+    $host = $_SERVER['HTTP_HOST'] ?? '';
+    $user['photo_url'] = $scheme . '://' . $host . '/uploads/employee_photos/' . basename($photos[0]);
+}
+
 echo json_encode(['success' => true, 'user' => $user]);
