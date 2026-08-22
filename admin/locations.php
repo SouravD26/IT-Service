@@ -37,6 +37,10 @@ $chk_lng = $conn->query("SHOW COLUMNS FROM locations LIKE 'longitude'");
 if ($chk_lng && $chk_lng->num_rows === 0) {
     $conn->query("ALTER TABLE locations ADD COLUMN longitude DECIMAL(11,8) DEFAULT NULL");
 }
+$chk_radius = $conn->query("SHOW COLUMNS FROM locations LIKE 'radius_meters'");
+if ($chk_radius && $chk_radius->num_rows === 0) {
+    $conn->query("ALTER TABLE locations ADD COLUMN radius_meters INT NOT NULL DEFAULT 100");
+}
 
 // Handle Add Location
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_location'])) {
@@ -50,15 +54,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_location'])) {
         $stmt_check->bind_param("s", $location_name);
         $stmt_check->execute();
         $result_check = $stmt_check->get_result();
-        
+
         if ($result_check->num_rows > 0) {
             $message = "This location already exists";
             $message_type = "warning";
         } else {
             $loc_lat = isset($_POST['latitude']) && $_POST['latitude'] !== '' ? (float)$_POST['latitude'] : null;
             $loc_lng = isset($_POST['longitude']) && $_POST['longitude'] !== '' ? (float)$_POST['longitude'] : null;
-            $stmt_insert = $conn->prepare("INSERT INTO locations (name, latitude, longitude) VALUES (?, ?, ?)");
-            $stmt_insert->bind_param("sdd", $location_name, $loc_lat, $loc_lng);
+            $loc_radius = max(50, min(5000, (int)($_POST['radius_meters'] ?? 100)));
+            $stmt_insert = $conn->prepare("INSERT INTO locations (name, latitude, longitude, radius_meters) VALUES (?, ?, ?, ?)");
+            $stmt_insert->bind_param("sddi", $location_name, $loc_lat, $loc_lng, $loc_radius);
             
             if ($stmt_insert->execute()) {
                 $message = "✓ Location added successfully!";
@@ -78,8 +83,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_coords'])) {
     $upd_id  = (int)$_POST['loc_id'];
     $upd_lat = isset($_POST['upd_latitude'])  && $_POST['upd_latitude']  !== '' ? (float)$_POST['upd_latitude']  : null;
     $upd_lng = isset($_POST['upd_longitude']) && $_POST['upd_longitude'] !== '' ? (float)$_POST['upd_longitude'] : null;
-    $stmt_upd = $conn->prepare("UPDATE locations SET latitude = ?, longitude = ? WHERE id = ?");
-    $stmt_upd->bind_param("ddi", $upd_lat, $upd_lng, $upd_id);
+    $upd_radius = max(50, min(5000, (int)($_POST['upd_radius_meters'] ?? 100)));
+    $stmt_upd = $conn->prepare("UPDATE locations SET latitude = ?, longitude = ?, radius_meters = ? WHERE id = ?");
+    $stmt_upd->bind_param("ddii", $upd_lat, $upd_lng, $upd_radius, $upd_id);
     if ($stmt_upd->execute()) {
         $message = "✓ Office GPS coordinates updated successfully!";
         $message_type = "success";
@@ -120,7 +126,7 @@ if (isset($_GET['delete_location'])) {
 }
 
 // Fetch all locations
-$stmt = $conn->prepare("SELECT id, name, latitude, longitude, created_at FROM locations ORDER BY name");
+$stmt = $conn->prepare("SELECT id, name, latitude, longitude, radius_meters, created_at FROM locations ORDER BY name");
 $stmt->execute();
 $result = $stmt->get_result();
 ?>
@@ -161,12 +167,16 @@ $result = $stmt->get_result();
                     <div class="col-md-1 d-flex align-items-end">
                         <button type="button" class="btn btn-outline-secondary w-100" onclick="fillMyLocation('add_lat','add_lng')" title="Use my current GPS location">📍 GPS</button>
                     </div>
+                    <div class="col-md-2">
+                        <label class="form-label">Radius (m)</label>
+                        <input type="number" name="radius_meters" class="form-control" value="100" min="50" max="5000">
+                    </div>
                     <div class="col-md-2 d-flex align-items-end">
                         <button type="submit" name="add_location" class="btn btn-success w-100">✓ Add Location</button>
                     </div>
                 </form>
                 <div class="mt-2 text-muted small">
-                    <i class="fas fa-info-circle"></i> Set GPS coordinates to enforce <strong>100-metre attendance radius</strong>. Leave blank to allow attendance from anywhere.
+                    <i class="fas fa-info-circle"></i> Set GPS coordinates and a radius to restrict attendance to that area for employees assigned to this location. Leave coordinates blank to allow attendance from anywhere.
                 </div>
             </div>
         </div>
@@ -199,14 +209,14 @@ $result = $stmt->get_result();
                                     echo "<td><strong>" . htmlspecialchars($row['name']) . "</strong></td>";
                                     if ($hasCoords) {
                                         echo "<td><span class='badge bg-success'>✓ Set</span> <small class='text-muted'>" . $row['latitude'] . ", " . $row['longitude'] . "</small></td>";
-                                        echo "<td><span class='badge bg-primary'>100 m</span></td>";
+                                        echo "<td><span class='badge bg-primary'>" . (int)$row['radius_meters'] . " m</span></td>";
                                     } else {
                                         echo "<td><span class='badge bg-warning text-dark'>⚠ Not Set</span> <small class='text-muted'>No restriction</small></td>";
                                         echo "<td><span class='badge bg-secondary'>None</span></td>";
                                     }
                                     echo "<td>" . date('d-m-Y H:i', strtotime($row['created_at'])) . "</td>";
                                     echo "<td>";
-                                    echo "<button type='button' onclick=\"openSetCoords(" . $row['id'] . ", '" . htmlspecialchars($row['name'], ENT_QUOTES) . "', '" . $row['latitude'] . "', '" . $row['longitude'] . "')\" class='btn btn-sm btn-info me-1'>📍 Set GPS</button>";
+                                    echo "<button type='button' onclick=\"openSetCoords(" . $row['id'] . ", '" . htmlspecialchars($row['name'], ENT_QUOTES) . "', '" . $row['latitude'] . "', '" . $row['longitude'] . "', " . (int)$row['radius_meters'] . ")\" class='btn btn-sm btn-info me-1'>📍 Set GPS</button>";
                                     echo "<button type='button' onclick=\"confirmDeleteLocation(" . $row['id'] . ", '" . htmlspecialchars($row['name'], ENT_QUOTES) . "')\" class='btn btn-sm btn-danger'>Delete</button>";
                                     echo "</td>";
                                     echo "</tr>";
@@ -239,7 +249,7 @@ $result = $stmt->get_result();
                         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                     </div>
                     <div class="modal-body">
-                        <p class="text-muted small">Setting coordinates enables the <strong>100-metre attendance restriction</strong>. Employees outside this radius cannot mark attendance.</p>
+                        <p class="text-muted small">Setting coordinates enables an <strong>attendance radius restriction</strong> for employees assigned to this location.</p>
                         <div class="mb-3">
                             <label class="form-label fw-semibold">Location: <span id="modal_loc_name" class="text-primary"></span></label>
                         </div>
@@ -251,6 +261,10 @@ $result = $stmt->get_result();
                             <div class="col-6">
                                 <label class="form-label">Longitude</label>
                                 <input type="number" step="any" name="upd_longitude" id="modal_lng" class="form-control" placeholder="e.g., 88.3639" required>
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label">Radius (m)</label>
+                                <input type="number" name="upd_radius_meters" id="modal_radius" class="form-control" value="100" min="50" max="5000" required>
                             </div>
                         </div>
                         <div class="mt-2">
@@ -270,11 +284,12 @@ $result = $stmt->get_result();
     </div>
 
     <script>
-        function openSetCoords(id, name, lat, lng) {
+        function openSetCoords(id, name, lat, lng, radius) {
             document.getElementById('modal_loc_id').value   = id;
             document.getElementById('modal_loc_name').textContent = name;
             document.getElementById('modal_lat').value      = (lat && lat !== 'null') ? lat : '';
             document.getElementById('modal_lng').value      = (lng && lng !== 'null') ? lng : '';
+            document.getElementById('modal_radius').value   = radius || 100;
             new bootstrap.Modal(document.getElementById('setCoordsModal')).show();
         }
 

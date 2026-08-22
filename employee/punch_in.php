@@ -79,9 +79,9 @@ function haversineDistance($lat1, $lon1, $lat2, $lon2) {
     return $R * 2 * atan2(sqrt($a), sqrt(1-$a));
 }
 
-// --- Validate employee is within allowed radius of Head Office (if geo_restricted is ON) ---
+// --- Validate employee is within allowed radius of their assigned Location (if geo_restricted is ON) ---
 function checkLocationAllowed($conn, $user_id, $user_lat, $user_lng) {
-    $stmt = $conn->prepare("SELECT geo_restricted FROM users WHERE id = ? LIMIT 1");
+    $stmt = $conn->prepare("SELECT geo_restricted, location FROM users WHERE id = ? LIMIT 1");
     $stmt->bind_param("i", $user_id);
     $stmt->execute();
     $user = $stmt->get_result()->fetch_assoc();
@@ -97,18 +97,30 @@ function checkLocationAllowed($conn, $user_id, $user_lat, $user_lng) {
         return ['allowed' => false, 'message' => 'Location access is required to mark attendance. Please allow GPS in your browser and try again.'];
     }
 
-    $res = $conn->query("SELECT latitude, longitude, radius_meters, office_name FROM office_settings ORDER BY id LIMIT 1");
-    if (!$res || $res->num_rows === 0 || !($office = $res->fetch_assoc()) || $office['latitude'] === null) {
+    $locationName = $user['location'] ?? '';
+    if ($locationName === '') {
+        // No Location assigned to this employee — nothing to enforce against.
         return ['allowed' => true, 'distance' => null];
     }
 
-    $radius   = max(50, (int)($office['radius_meters'] ?? 100));
-    $distance = haversineDistance($user_lat, $user_lng, $office['latitude'], $office['longitude']);
+    $stmt2 = $conn->prepare("SELECT name, latitude, longitude, radius_meters FROM locations WHERE name = ? LIMIT 1");
+    $stmt2->bind_param("s", $locationName);
+    $stmt2->execute();
+    $loc = $stmt2->get_result()->fetch_assoc();
+    $stmt2->close();
+
+    if (!$loc || $loc['latitude'] === null || $loc['longitude'] === null) {
+        // Location has no GPS configured yet — allow from anywhere until an admin sets it.
+        return ['allowed' => true, 'distance' => null];
+    }
+
+    $radius   = max(50, (int)($loc['radius_meters'] ?? 100));
+    $distance = haversineDistance($user_lat, $user_lng, $loc['latitude'], $loc['longitude']);
 
     if ($distance > $radius) {
         return [
             'allowed' => false,
-            'message' => 'You are ' . round($distance) . ' m away from ' . ($office['office_name'] ?? 'the office') . '. Attendance is only allowed within ' . $radius . ' m.'
+            'message' => 'You are ' . round($distance) . ' m away from ' . $loc['name'] . '. Attendance is only allowed within ' . $radius . ' m.'
         ];
     }
     return ['allowed' => true, 'distance' => round($distance)];

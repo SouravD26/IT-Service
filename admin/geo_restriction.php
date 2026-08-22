@@ -22,54 +22,6 @@ if ($chk && $chk->num_rows === 0) {
     $conn->query("ALTER TABLE users ADD COLUMN geo_restricted TINYINT(1) NOT NULL DEFAULT 0");
 }
 
-// Create office_settings table if missing
-$conn->query("CREATE TABLE IF NOT EXISTS office_settings (
-    id INT PRIMARY KEY AUTO_INCREMENT,
-    office_name VARCHAR(100) NOT NULL DEFAULT 'Head Office',
-    latitude DECIMAL(11,8) DEFAULT NULL,
-    longitude DECIMAL(11,8) DEFAULT NULL,
-    radius_meters INT NOT NULL DEFAULT 100,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-)");
-
-// Seed default coordinates only if table is empty
-$cnt_res = $conn->query("SELECT COUNT(*) AS c FROM office_settings");
-if ($cnt_res && (int)$cnt_res->fetch_assoc()['c'] === 0) {
-    $conn->query("INSERT INTO office_settings (office_name, latitude, longitude, radius_meters)
-                  VALUES ('Head Office', 22.55075955, 88.39922009, 100)");
-}
-
-// Handle Save Office Location
-$office_msg = '';
-$office_msg_type = '';
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_office'])) {
-    $o_name   = htmlspecialchars(trim($_POST['office_name']));
-    $o_lat    = (float)$_POST['office_lat'];
-    $o_lng    = (float)$_POST['office_lng'];
-    $o_radius = max(50, min(5000, (int)$_POST['office_radius']));
-    $o_id     = (int)$_POST['office_id'];
-    $stmt = $conn->prepare("UPDATE office_settings SET office_name=?, latitude=?, longitude=?, radius_meters=? WHERE id=?");
-    $stmt->bind_param("sddii", $o_name, $o_lat, $o_lng, $o_radius, $o_id);
-    if ($stmt->execute()) {
-        $office_msg = "✓ Office location saved successfully!";
-        $office_msg_type = "success";
-    } else {
-        $office_msg = "Error: " . $stmt->error;
-        $office_msg_type = "danger";
-    }
-    $stmt->close();
-}
-
-// Load current office settings (with safe defaults if not yet seeded)
-$office_res = $conn->query("SELECT * FROM office_settings ORDER BY id LIMIT 1");
-$office = ($office_res && $office_res->num_rows > 0) ? $office_res->fetch_assoc() : [
-    'id'            => 0,
-    'office_name'   => 'Head Office',
-    'latitude'      => null,
-    'longitude'     => null,
-    'radius_meters' => 100,
-];
-
 // Filters
 $search      = isset($_GET['search']) ? trim($_GET['search']) : '';
 $dept_filter = isset($_GET['dept'])   ? trim($_GET['dept'])   : '';
@@ -102,9 +54,11 @@ $total_pages = max(1, (int)ceil($total_filtered / $per_page));
 $page = min($page, $total_pages);  // clamp to valid range
 $offset = ($page - 1) * $per_page;
 
-// Build query — no JOIN to locations (GPS comes from office_settings now)
-$sql    = "SELECT u.id, u.name, u.employee_id, u.department, u.location, u.company, u.geo_restricted
+// Build query — join locations to know whether the employee's assigned Location has GPS set
+$sql    = "SELECT u.id, u.name, u.employee_id, u.department, u.location, u.company, u.geo_restricted,
+                  l.latitude AS loc_lat, l.longitude AS loc_lng, l.radius_meters AS loc_radius
            FROM users u
+           LEFT JOIN locations l ON l.name = u.location
            WHERE u.role = 'employee' AND u.status = 'Working'";
 $params = [];
 $types  = '';
@@ -189,84 +143,11 @@ $totals = $totals_res ? $totals_res->fetch_assoc() : ['total' => 0, 'restricted'
         <div class="alert alert-info d-flex gap-3 align-items-start mb-4">
             <span style="font-size:1.6rem;">📡</span>
             <div>
-                <strong>How it works:</strong> Toggle ON for any employee to enforce that they can only mark attendance when within <strong><?= (int)$office['radius_meters'] ?> metres</strong> of your Head Office.
+                <strong>How it works:</strong> Toggle ON for any employee to enforce that they can only mark attendance when within the allowed radius of their assigned <strong>Location</strong>.
+                Set each Location's GPS coordinates and radius on the <a href="locations.php">Location Management</a> page.
                 Employees toggled OFF can mark attendance from anywhere.
             </div>
         </div>
-
-        <!-- ===== HEAD OFFICE GPS CARD ===== -->
-        <div class="card shadow-sm mb-4 border-0" style="border-left:5px solid #20c997 !important; border-left-width:5px !important;">
-            <div class="card-header d-flex align-items-center justify-content-between" style="background:#e6f9f4;">
-                <span class="fw-bold" style="color:#0a6c50;">📍 Head Office GPS Location</span>
-                <button class="btn btn-sm btn-outline-success" type="button" data-bs-toggle="collapse" data-bs-target="#officeEditPanel">
-                    ✏️ Edit
-                </button>
-            </div>
-            <div class="card-body py-3">
-                <?php if ($office_msg): ?>
-                <div class="alert alert-<?= $office_msg_type ?> py-2 mb-3"><?= $office_msg ?></div>
-                <?php endif; ?>
-
-                <!-- Current coords display -->
-                <div class="d-flex flex-wrap gap-3 align-items-center mb-1">
-                    <div>
-                        <span class="text-muted small">Office Name</span><br>
-                        <strong id="disp_name"><?= htmlspecialchars($office['office_name']) ?></strong>
-                    </div>
-                    <div>
-                        <span class="text-muted small">Latitude</span><br>
-                        <code id="disp_lat"><?= $office['latitude'] ?></code>
-                    </div>
-                    <div>
-                        <span class="text-muted small">Longitude</span><br>
-                        <code id="disp_lng"><?= $office['longitude'] ?></code>
-                    </div>
-                    <div>
-                        <span class="text-muted small">Allowed Radius</span><br>
-                        <span class="badge bg-primary" id="disp_radius"><?= (int)$office['radius_meters'] ?> m</span>
-                    </div>
-                    <div class="ms-auto">
-                        <?php if ($office['latitude']): ?>
-                        <a href="https://www.google.com/maps?q=<?= $office['latitude'] ?>,<?= $office['longitude'] ?>" target="_blank" class="btn btn-sm btn-outline-secondary">🗺 View on Map</a>
-                        <?php endif; ?>
-                    </div>
-                </div>
-
-                <!-- Collapsible edit form -->
-                <div class="collapse mt-3" id="officeEditPanel">
-                    <hr>
-                    <form method="POST" class="row g-3">
-                        <input type="hidden" name="office_id" value="<?= (int)$office['id'] ?>">
-                        <div class="col-md-4">
-                            <label class="form-label">Office Name</label>
-                            <input type="text" name="office_name" class="form-control" value="<?= htmlspecialchars($office['office_name']) ?>" required>
-                        </div>
-                        <div class="col-md-3">
-                            <label class="form-label">Latitude</label>
-                            <input type="number" step="any" name="office_lat" id="edit_lat" class="form-control" value="<?= $office['latitude'] ?>" required>
-                        </div>
-                        <div class="col-md-3">
-                            <label class="form-label">Longitude</label>
-                            <input type="number" step="any" name="office_lng" id="edit_lng" class="form-control" value="<?= $office['longitude'] ?>" required>
-                        </div>
-                        <div class="col-md-2">
-                            <label class="form-label">Radius (m)</label>
-                            <input type="number" name="office_radius" class="form-control" value="<?= (int)$office['radius_meters'] ?>" min="50" max="5000">
-                        </div>
-                        <div class="col-12 d-flex gap-2 align-items-center">
-                            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="useMyGPS()">
-                                📍 Use My Current GPS
-                            </button>
-                            <small class="text-muted">or paste coordinates from Google Maps (right-click → copy coordinates)</small>
-                        </div>
-                        <div class="col-12">
-                            <button type="submit" name="save_office" class="btn btn-success">💾 Save Office Location</button>
-                        </div>
-                    </form>
-                </div>
-            </div>
-        </div>
-        <!-- ===== END HEAD OFFICE GPS CARD ===== -->
 
         <!-- Stats -->
         <div class="row g-3 mb-4">
@@ -331,7 +212,7 @@ $totals = $totals_res ? $totals_res->fetch_assoc() : ['total' => 0, 'restricted'
             while ($emp = $employees->fetch_assoc()):
                 $rowCount++;
                 $isOn     = (int)$emp['geo_restricted'];
-                $officeReady = ($office['latitude'] !== null && $office['longitude'] !== null);
+                $locationReady = ($emp['loc_lat'] !== null && $emp['loc_lng'] !== null);
                 $rowClass = $isOn ? 'restricted' : 'unrestricted';
         ?>
         <div class="emp-row <?= $rowClass ?>" id="row-<?= $emp['id'] ?>">
@@ -349,10 +230,12 @@ $totals = $totals_res ? $totals_res->fetch_assoc() : ['total' => 0, 'restricted'
                     <?php if ($emp['location']): ?>
                     · <?= htmlspecialchars($emp['location']) ?>
                     <?php endif; ?>
-                    <?php if ($isOn && !$officeReady): ?>
-                    <span class="badge bg-warning text-dark no-gps-badge ms-1">⚠ Office GPS not set</span>
-                    <?php elseif ($isOn && $officeReady): ?>
-                    <span class="badge bg-success no-gps-badge ms-1">📍 GPS Active</span>
+                    <?php if ($isOn && empty($emp['location'])): ?>
+                    <span class="badge bg-warning text-dark no-gps-badge ms-1">⚠ No Location assigned</span>
+                    <?php elseif ($isOn && !$locationReady): ?>
+                    <span class="badge bg-warning text-dark no-gps-badge ms-1">⚠ Location GPS not set</span>
+                    <?php elseif ($isOn && $locationReady): ?>
+                    <span class="badge bg-success no-gps-badge ms-1">📍 GPS Active (<?= (int)$emp['loc_radius'] ?> m)</span>
                     <?php endif; ?>
                     <?= $emp['company'] ? '· ' . htmlspecialchars($emp['company']) : '' ?>
                 </div>
@@ -495,25 +378,6 @@ $totals = $totals_res ? $totals_res->fetch_assoc() : ['total' => 0, 'restricted'
             });
         }
 
-        function useMyGPS() {
-            if (!navigator.geolocation) {
-                alert('Geolocation is not supported by your browser.');
-                return;
-            }
-            navigator.geolocation.getCurrentPosition(
-                pos => {
-                    document.getElementById('edit_lat').value = pos.coords.latitude.toFixed(8);
-                    document.getElementById('edit_lng').value = pos.coords.longitude.toFixed(8);
-                    // Auto-open the collapse panel if not already open
-                    const panel = document.getElementById('officeEditPanel');
-                    if (!panel.classList.contains('show')) {
-                        new bootstrap.Collapse(panel).show();
-                    }
-                },
-                err => { alert('Could not get location: ' + err.message); },
-                { enableHighAccuracy: true, timeout: 10000 }
-            );
-        }
     </script>
 </body>
 </html>

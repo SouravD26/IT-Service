@@ -67,9 +67,14 @@ function api_authenticate(mysqli $conn): array {
  */
 function api_authenticate_flexible(mysqli $conn): array {
     $headers = function_exists('getallheaders') ? getallheaders() : [];
-    $hasBearer = isset($_SERVER['HTTP_AUTHORIZATION']) || !empty($headers);
+    $hasBearer = false;
     foreach ($headers as $name => $value) {
-        if (strcasecmp($name, 'Authorization') === 0) $hasBearer = true;
+        if (strcasecmp($name, 'Authorization') === 0 && stripos($value, 'Bearer ') === 0) {
+            $hasBearer = true;
+        }
+    }
+    if (!$hasBearer && isset($_SERVER['HTTP_AUTHORIZATION']) && stripos($_SERVER['HTTP_AUTHORIZATION'], 'Bearer ') === 0) {
+        $hasBearer = true;
     }
 
     if ($hasBearer || isset($_GET['token'])) {
