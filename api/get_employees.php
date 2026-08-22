@@ -1,12 +1,9 @@
 <?php
-session_start();
 include('../config/db.php');
+include('../config/api_auth.php');
 
-// Check authentication
-if (!isset($_SESSION['user_id'])) {
-    echo json_encode(['success' => false, 'message' => 'Not authenticated']);
-    exit;
-}
+// Accepts either a browser session (web app) or a Bearer token (Flutter app)
+$authUser = api_authenticate_flexible($conn);
 
 // Fetch all employees (simple list - no photos)
 $employees = [];
