@@ -4,24 +4,20 @@
  * Returns: first punch_in, last punch_out, and total hours for a user on a given date
  * This merges data from both face attendance and manual punch in/out
  */
-session_start();
 include('../config/db.php');
+include('../config/api_auth.php');
 
-// Check authentication
-if (!isset($_SESSION['user_id'])) {
-    echo json_encode(['success' => false, 'message' => 'Not authenticated']);
-    exit;
-}
+$authUser = api_authenticate_flexible($conn);
 
 $response = ['success' => false];
 
 // Get parameters
-$user_id = intval($_POST['user_id'] ?? $_SESSION['user_id']);
+$user_id = intval($_POST['user_id'] ?? $authUser['id']);
 $date = $_POST['date'] ?? date('Y-m-d');
 
 // Validate user is accessing their own data or is an admin
-$requester_role = $_SESSION['role'] ?? '';
-if ($user_id != $_SESSION['user_id'] && $requester_role !== 'admin' && $requester_role !== 'suparadmin') {
+$requester_role = $authUser['role'] ?? '';
+if ($user_id != $authUser['id'] && $requester_role !== 'admin' && $requester_role !== 'suparadmin') {
     echo json_encode(['success' => false, 'message' => 'Unauthorized']);
     exit;
 }

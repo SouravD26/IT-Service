@@ -1,10 +1,11 @@
 <?php
-session_start();
 include('../config/db.php');
+include('../config/api_auth.php');
 
 header('Content-Type: application/json');
 
-if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION['role'] !== 'suparadmin')) {
+$authUser = api_authenticate_flexible($conn);
+if ($authUser['role'] !== 'admin' && $authUser['role'] !== 'suparadmin') {
     echo json_encode(['success' => false, 'message' => 'Unauthorized']);
     exit();
 }

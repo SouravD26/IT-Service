@@ -1,12 +1,8 @@
 <?php
-session_start();
 include('../config/db.php');
+include('../config/api_auth.php');
 
-// Check authentication
-if (!isset($_SESSION['user_id'])) {
-    echo json_encode(['success' => false, 'message' => 'Not authenticated']);
-    exit;
-}
+$authUser = api_authenticate_flexible($conn);
 
 $response = ['success' => false];
 
@@ -24,7 +20,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     error_log("POST name: " . $name);
     error_log("POST confidence: " . $confidence);
     error_log("Browser time received: " . ($browser_time ?? 'NOT SENT'));
-    error_log("Session user_id: " . ($_SESSION['user_id'] ?? 'NOT SET'));
+    error_log("Authenticated user_id: " . ($authUser['id'] ?? 'NOT SET'));
     
     error_log("Face Attendance: employee_id=$employee_id, name=$name, confidence=$confidence, browser_time=$browser_time");
     

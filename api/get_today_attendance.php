@@ -1,13 +1,9 @@
 <?php
-session_start();
 require_once '../config/db.php';
+require_once '../config/api_auth.php';
 
-// Check if user is logged in
-if (!isset($_SESSION['user_id'])) {
-    header('Content-Type: application/json');
-    echo json_encode(['success' => false, 'message' => 'Not authenticated']);
-    exit;
-}
+header('Content-Type: application/json');
+$authUser = api_authenticate_flexible($conn);
 
 try {
     $today = date('Y-m-d');

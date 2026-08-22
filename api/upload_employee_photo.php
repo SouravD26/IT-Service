@@ -1,7 +1,7 @@
 <?php
 // Modified upload handler that extracts and stores face descriptor
-session_start();
 require_once '../config/db.php';
+require_once '../config/api_auth.php';
 
 header('Content-Type: application/json');
 
@@ -13,9 +13,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 
 try {
     // Check authentication
-    if (!isset($_SESSION['user_id'])) {
-        throw new Exception('Unauthorized access');
-    }
+    $authUser = api_authenticate_flexible($conn);
     
     $employee_id = isset($_POST['employee_id']) ? intval($_POST['employee_id']) : null;
     

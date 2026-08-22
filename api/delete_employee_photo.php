@@ -1,6 +1,6 @@
 <?php
-session_start();
 require_once '../config/db.php';
+require_once '../config/api_auth.php';
 
 header('Content-Type: application/json');
 
@@ -12,7 +12,8 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 
 try {
     // Check authentication - only admin can delete
-    if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION['role'] !== 'suparadmin')) {
+    $authUser = api_authenticate_flexible($conn);
+    if ($authUser['role'] !== 'admin' && $authUser['role'] !== 'suparadmin') {
         throw new Exception('Unauthorized access');
     }
     
