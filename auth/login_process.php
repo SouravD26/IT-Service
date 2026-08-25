@@ -62,6 +62,8 @@ if ($result->num_rows > 0) {
             header("Location: ../admin/dashboard.php");
         } elseif ($user['role'] === 'admin') {
             header("Location: ../admin/admin_dashboard.php");
+        } elseif ($user['role'] === 'supervisor') {
+            header("Location: ../supervisor/dashboard.php");
         } elseif ($user['role'] === 'employee') {
             header("Location: ../employee/dashboard.php");
         } elseif ($user['role'] === 'face_operator') {

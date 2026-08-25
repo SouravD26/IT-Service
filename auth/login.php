@@ -246,7 +246,7 @@ session_start();
                     required inputmode="tel" pattern="[0-9]{10,}"
                     title="Phone number must contain only digits (minimum 10 digits)"
                     onkeypress="return /[0-9]/.test(String.fromCharCode(event.which))"
-                    onpaste="event.preventDefault()">
+                    oninput="this.value=this.value.replace(/[^0-9]/g,'');">
             </div>
 
             <div class="input-group">

@@ -81,6 +81,7 @@ $available_rights = [
     'salary_slip'        => '💰 Salary Slip',
     'leave_management'   => '🗓️ Leave Management',
     'manage_admins'      => '👤 Manage Admins',
+    'manage_supervisors' => '🧑‍✈️ Create Supervisor',
 ];
 
 // Handle Add Admin

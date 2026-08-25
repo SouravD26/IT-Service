@@ -1,6 +1,7 @@
 <?php
 session_start();
 include('../config/db.php');
+require_once __DIR__ . '/employee_unique_check.php';
 
 // Enable authentication check
 if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION['role'] !== 'suparadmin')) {
@@ -26,6 +27,13 @@ if ($from === 'suparadmin') {
 
 $message = "";
 $message_type = "";
+
+// Pick up a one-time message left behind by a redirect (see the delete handler)
+if (isset($_SESSION['flash_message'])) {
+    $message      = $_SESSION['flash_message'];
+    $message_type = $_SESSION['flash_message_type'] ?? 'success';
+    unset($_SESSION['flash_message'], $_SESSION['flash_message_type']);
+}
 
 // Add columns if they don't exist
 $check_col = $conn->query("SHOW COLUMNS FROM users LIKE 'employee_id'");
@@ -53,6 +61,7 @@ $columns_to_add = [
     'aadhar_number' => 'VARCHAR(20)',
     'pan_number' => 'VARCHAR(20)',
     'alternate_number' => 'VARCHAR(20)',
+    'family_member_name' => 'VARCHAR(100)',
     'address' => 'TEXT',
     'bank_account_number' => 'VARCHAR(30)',
     'bank_ifsc_code' => 'VARCHAR(15)',
@@ -260,6 +269,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_employee'])) {
     $week_off = htmlspecialchars($_POST['week_off']);
     $aadhar_number = htmlspecialchars(trim($_POST['aadhar_number'] ?? ''));
     $pan_number = strtoupper(htmlspecialchars(trim($_POST['pan_number'] ?? '')));
+    $family_member_name = htmlspecialchars(trim($_POST['family_member_name'] ?? ''));
     $alternate_number = htmlspecialchars(trim($_POST['alternate_number'] ?? ''));
     $address = htmlspecialchars(trim($_POST['address'] ?? ''));
     $bank_account_number = htmlspecialchars(trim($_POST['bank_account_number'] ?? ''));
@@ -281,21 +291,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_employee'])) {
         $message = "Maximum employee limit reached (" . MAX_EMPLOYEES_LIMIT . "). Contact the developer to raise this limit before adding more employees.";
         $message_type = "danger";
     } else {
-        // Check if phone already exists
-        $stmt_check = $conn->prepare("SELECT id FROM users WHERE phone = ?");
-        $stmt_check->bind_param("s", $phone);
-        $stmt_check->execute();
-        $result_check = $stmt_check->get_result();
+        // Mobile / Aadhar / PAN / bank account must be unique across employees
+        $duplicate_errors = check_employee_duplicates($conn, [
+            'phone'               => $phone,
+            'aadhar_number'       => $aadhar_number,
+            'pan_number'          => $pan_number,
+            'bank_account_number' => $bank_account_number,
+        ]);
 
-        if ($result_check->num_rows > 0) {
-            $message = "Phone number already exists";
+        if (!empty($duplicate_errors)) {
+            $message = implode('. ', $duplicate_errors);
             $message_type = "danger";
         } else {
             // Create employee WITHOUT password - Super Admin will set it later
             // Use a placeholder password that cannot login (starts with !)
             $placeholder_password = password_hash('!' . uniqid(), PASSWORD_BCRYPT);
-            $stmt_insert = $conn->prepare("INSERT INTO users (name, email, password, role, department, employee_id, company, phone, shift_time, location, date_of_joining, date_of_exit, status, sex, week_off, aadhar_number, pan_number, alternate_number, address, bank_account_number, bank_ifsc_code, password_set) VALUES (?, ?, ?, 'employee', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, FALSE)");
-            $stmt_insert->bind_param("ssssssssssssssssssss", $name, $email, $placeholder_password, $department, $employee_id, $company, $phone, $shift_time, $location, $date_of_joining, $date_of_exit, $status, $sex, $week_off, $aadhar_number, $pan_number, $alternate_number, $address, $bank_account_number, $bank_ifsc_code);
+            $stmt_insert = $conn->prepare("INSERT INTO users (name, email, password, role, department, employee_id, company, phone, shift_time, location, date_of_joining, date_of_exit, status, sex, week_off, aadhar_number, pan_number, family_member_name, alternate_number, address, bank_account_number, bank_ifsc_code, password_set) VALUES (?, ?, ?, 'employee', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, FALSE)");
+            $stmt_insert->bind_param("sssssssssssssssssssss", $name, $email, $placeholder_password, $department, $employee_id, $company, $phone, $shift_time, $location, $date_of_joining, $date_of_exit, $status, $sex, $week_off, $aadhar_number, $pan_number, $family_member_name, $alternate_number, $address, $bank_account_number, $bank_ifsc_code);
 
             if ($stmt_insert->execute()) {
                 $new_user_id = $conn->insert_id;
@@ -333,7 +345,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_employee'])) {
             }
             $stmt_insert->close();
         }
-        $stmt_check->close();
     }
 }
 
@@ -355,6 +366,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_employee'])) {
     $week_off = htmlspecialchars($_POST['week_off']);
     $aadhar_number = htmlspecialchars(trim($_POST['aadhar_number'] ?? ''));
     $pan_number = strtoupper(htmlspecialchars(trim($_POST['pan_number'] ?? '')));
+    $family_member_name = htmlspecialchars(trim($_POST['family_member_name'] ?? ''));
     $alternate_number = htmlspecialchars(trim($_POST['alternate_number'] ?? ''));
     $address = htmlspecialchars(trim($_POST['address'] ?? ''));
     $bank_account_number = htmlspecialchars(trim($_POST['bank_account_number'] ?? ''));
@@ -373,8 +385,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_employee'])) {
         $message = "Date of Exit is required when Status is 'Resign'";
         $message_type = "danger";
     } else {
-        $stmt_update = $conn->prepare("UPDATE users SET name=?, email=?, department=?, employee_id=?, company=?, phone=?, shift_time=?, location=?, date_of_joining=?, date_of_exit=?, status=?, sex=?, week_off=?, aadhar_number=?, pan_number=?, alternate_number=?, address=?, bank_account_number=?, bank_ifsc_code=? WHERE id=?");
-        $stmt_update->bind_param("sssssssssssssssssssi", $name, $email, $department, $employee_id, $company, $phone, $shift_time, $location, $date_of_joining, $date_of_exit, $status, $sex, $week_off, $aadhar_number, $pan_number, $alternate_number, $address, $bank_account_number, $bank_ifsc_code, $emp_id);
+        // Mobile / Aadhar / PAN / bank account must be unique across employees
+        $duplicate_errors = check_employee_duplicates($conn, [
+            'phone'               => $phone,
+            'aadhar_number'       => $aadhar_number,
+            'pan_number'          => $pan_number,
+            'bank_account_number' => $bank_account_number,
+        ], $emp_id);
+
+        if (!empty($duplicate_errors)) {
+            $message = implode('. ', $duplicate_errors);
+            $message_type = "danger";
+        }
+    }
+
+    if ($message_type !== "danger") {
+        $stmt_update = $conn->prepare("UPDATE users SET name=?, email=?, department=?, employee_id=?, company=?, phone=?, shift_time=?, location=?, date_of_joining=?, date_of_exit=?, status=?, sex=?, week_off=?, aadhar_number=?, pan_number=?, family_member_name=?, alternate_number=?, address=?, bank_account_number=?, bank_ifsc_code=? WHERE id=?");
+        $stmt_update->bind_param("ssssssssssssssssssssi", $name, $email, $department, $employee_id, $company, $phone, $shift_time, $location, $date_of_joining, $date_of_exit, $status, $sex, $week_off, $aadhar_number, $pan_number, $family_member_name, $alternate_number, $address, $bank_account_number, $bank_ifsc_code, $emp_id);
 
         if ($stmt_update->execute()) {
             save_profile_photo($conn, $emp_id);
@@ -429,17 +456,23 @@ if (isset($_GET['delete_employee'])) {
     
     if ($stmt_delete->execute()) {
         if ($stmt_delete->affected_rows > 0) {
-            $message = "✓ Employee deleted successfully!";
-            $message_type = "success";
+            $_SESSION['flash_message']      = "✓ Employee deleted successfully!";
+            $_SESSION['flash_message_type'] = "success";
         } else {
-            $message = "⚠ Employee not found";
-            $message_type = "warning";
+            $_SESSION['flash_message']      = "⚠ Employee not found";
+            $_SESSION['flash_message_type'] = "warning";
         }
     } else {
-        $message = "✗ Error: " . $stmt_delete->error;
-        $message_type = "danger";
+        $_SESSION['flash_message']      = "✗ Error: " . $stmt_delete->error;
+        $_SESSION['flash_message_type'] = "danger";
     }
     $stmt_delete->close();
+
+    // Redirect back to the clean list URL. Without this the browser keeps
+    // ?delete_employee=<id> in the address bar, so the next reload re-runs the
+    // delete against an already-deleted row and reports "Employee not found".
+    header("Location: employees.php" . ($from !== '' ? "?from=" . urlencode($from) : ""));
+    exit();
 }
 
 // Handle AJAX fetch employee data (includes salary)
@@ -448,7 +481,7 @@ if (isset($_GET['fetch_employee'])) {
     $stmt_fetch = $conn->prepare("
         SELECT u.id, u.name, u.email, u.employee_id, u.company, u.phone, u.department,
                u.shift_time, u.location, u.date_of_joining, u.date_of_exit, u.status, u.sex, u.week_off,
-               u.aadhar_number, u.pan_number, u.alternate_number, u.address,
+               u.aadhar_number, u.pan_number, u.family_member_name, u.alternate_number, u.address,
                u.bank_account_number, u.bank_ifsc_code,
                COALESCE(s.salary_ctc, 0)                AS salary_ctc,
                COALESCE(s.basic_monthly, 0)             AS basic_monthly,
@@ -552,8 +585,8 @@ $employee_limit_reached = $current_employee_count >= MAX_EMPLOYEES_LIMIT;
                 </button>
                 <span class="badge bg-secondary align-middle ms-1"><?php echo $current_employee_count; ?> / <?php echo MAX_EMPLOYEES_LIMIT; ?> employees</span>
             <?php endif; ?>
-            <!-- <a href="import_employees.php" class="btn btn-info btn-lg me-2">📥 Import Excel</a>
-            <a href="#" class="btn btn-success btn-lg" onclick="exportEmployees()">📤 Export Excel</a> -->
+            <a href="import_employees.php" class="btn btn-info btn-lg me-2">📥 Import Excel</a>
+            <a href="#" class="btn btn-success btn-lg" onclick="exportEmployees()">📤 Export Excel</a>
         </div>
 
         <!-- Search and Filter Section -->
@@ -614,20 +647,20 @@ $employee_limit_reached = $current_employee_count >= MAX_EMPLOYEES_LIMIT;
         <div class="card mb-4" id="addForm" style="display: none;">
             <div class="card-header bg-primary text-white">
                 <h5 class="mb-0">➕ Add New Employee</h5>
+                <small><span class="text-warning">*</span> marks a mandatory field</small>
             </div>
             <div class="card-body">
-                <form method="POST" class="row g-3" enctype="multipart/form-data">
+                <form method="POST" class="row g-3" enctype="multipart/form-data" id="addEmployeeForm">
                     <div class="col-md-3">
-                        <label class="form-label">Employee ID</label>
+                        <label class="form-label">Employee ID <span class="text-danger">*</span></label>
                         <input type="text" name="employee_id" class="form-control" placeholder="e.g., EMP001" required>
                     </div>
                     <div class="col-md-3">
-                        <label class="form-label">Full Name</label>
+                        <label class="form-label">Full Name <span class="text-danger">*</span></label>
                         <input type="text" name="name" class="form-control" placeholder="Enter name"
                             required
                             oninput="this.value=this.value.replace(/[^a-zA-Z\s]/g,'');this.value=this.value.replace(/\b\w/g,c=>c.toUpperCase());"
                             onkeypress="return /[a-zA-Z\s]/.test(String.fromCharCode(event.which))"
-                            onpaste="event.preventDefault();"
                             title="Name should contain letters only">
                     </div>
                     <div class="col-md-3">
@@ -639,26 +672,31 @@ $employee_limit_reached = $current_employee_count >= MAX_EMPLOYEES_LIMIT;
                             title="Enter a valid email address">
                     </div>
                     <div class="col-md-3">
-                        <label class="form-label">Phone Number</label>
+                        <label class="form-label">Phone Number <span class="text-danger">*</span></label>
                         <input type="tel" name="phone" class="form-control" placeholder="10-digit number"
                             required
                             minlength="10" maxlength="10"
                             pattern="[0-9]{10}"
                             oninput="this.value=this.value.replace(/[^0-9]/g,'').slice(0,10); validatePhone(this);"
                             onkeypress="return /[0-9]/.test(String.fromCharCode(event.which))"
-                            onpaste="event.preventDefault()"
                             title="Phone number must be exactly 10 digits">
                         <div class="invalid-feedback">Must be exactly 10 digits.</div>
                     </div>
                     <div class="col-md-3">
-                        <label class="form-label">Alternative Number</label>
-                        <input type="tel" name="alternate_number" class="form-control" placeholder="10-digit alternate number"
-                            maxlength="10" pattern="[0-9]{10}"
-                            oninput="this.value=this.value.replace(/[^0-9]/g,'').slice(0,10);"
-                            title="Alternative number must be exactly 10 digits">
+                        <label class="form-label">Family Member Name <span class="text-muted small">(optional)</span></label>
+                        <input type="text" name="family_member_name" class="form-control" placeholder="Enter family member name"
+                            oninput="this.value=this.value.replace(/[^a-zA-Z\s]/g,'');this.value=this.value.replace(/\b\w/g,c=>c.toUpperCase());"
+                            title="Name should contain letters only">
                     </div>
                     <div class="col-md-3">
-                        <label class="form-label">Gender</label>
+                        <label class="form-label">Family Contact Number <span class="text-muted small">(optional)</span></label>
+                        <input type="tel" name="alternate_number" class="form-control" placeholder="10-digit family contact number"
+                            maxlength="10" pattern="[0-9]{10}"
+                            oninput="this.value=this.value.replace(/[^0-9]/g,'').slice(0,10);"
+                            title="Family contact number must be exactly 10 digits">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Gender <span class="text-danger">*</span></label>
                         <select name="sex" class="form-control" required>
                             <option value="">Select Gender</option>
                             <option value="Male">Male</option>
@@ -667,7 +705,7 @@ $employee_limit_reached = $current_employee_count >= MAX_EMPLOYEES_LIMIT;
                         </select>
                     </div>
                     <div class="col-md-3">
-                        <label class="form-label">Project</label>
+                        <label class="form-label">Project <span class="text-danger">*</span></label>
                         <select name="department" class="form-control" required>
                             <option value="">Select Project</option>
                             <?php foreach ($departments as $dept): ?>
@@ -676,7 +714,7 @@ $employee_limit_reached = $current_employee_count >= MAX_EMPLOYEES_LIMIT;
                         </select>
                     </div>
                     <div class="col-md-3">
-                        <label class="form-label">Company</label>
+                        <label class="form-label">Company <span class="text-danger">*</span></label>
                         <select name="company" class="form-control" required>
                             <option value="">Select Company</option>
                             <?php foreach ($companies as $comp): ?>
@@ -685,21 +723,21 @@ $employee_limit_reached = $current_employee_count >= MAX_EMPLOYEES_LIMIT;
                         </select>
                     </div>
                     <div class="col-md-3">
-                        <label class="form-label">Aadhar Number</label>
+                        <label class="form-label">Aadhar Number <span class="text-muted small">(optional)</span></label>
                         <input type="text" name="aadhar_number" class="form-control" placeholder="12-digit Aadhar number"
                             maxlength="12" pattern="[0-9]{12}"
                             oninput="this.value=this.value.replace(/[^0-9]/g,'').slice(0,12);"
                             title="Aadhar number must be exactly 12 digits">
                     </div>
                     <div class="col-md-3">
-                        <label class="form-label">PAN Number</label>
+                        <label class="form-label">PAN Number <span class="text-muted small">(optional)</span></label>
                         <input type="text" name="pan_number" class="form-control" placeholder="e.g., ABCDE1234F"
                             maxlength="10" pattern="[A-Za-z]{5}[0-9]{4}[A-Za-z]{1}"
                             oninput="this.value=this.value.toUpperCase().slice(0,10);"
                             title="PAN format: 5 letters, 4 digits, 1 letter">
                     </div>
                     <div class="col-md-3">
-                        <label class="form-label">Shift Time</label>
+                        <label class="form-label">Shift Time <span class="text-danger">*</span></label>
                         <select name="shift_time" class="form-control" required>
                             <option value="">Select Shift</option>
                             <?php foreach ($shifts as $shift): ?>
@@ -708,7 +746,7 @@ $employee_limit_reached = $current_employee_count >= MAX_EMPLOYEES_LIMIT;
                         </select>
                     </div>
                     <div class="col-md-3">
-                        <label class="form-label">Location</label>
+                        <label class="form-label">Location <span class="text-danger">*</span></label>
                         <select name="location" class="form-control" required>
                             <option value="">Select Location</option>
                             <?php foreach ($locations as $loc): ?>
@@ -717,11 +755,11 @@ $employee_limit_reached = $current_employee_count >= MAX_EMPLOYEES_LIMIT;
                         </select>
                     </div>
                     <div class="col-md-3">
-                        <label class="form-label">Date of Joining</label>
+                        <label class="form-label">Date of Joining <span class="text-danger">*</span></label>
                         <input type="date" name="date_of_joining" class="form-control" required>
                     </div>
                     <div class="col-md-3">
-                        <label class="form-label">Status </label>
+                        <label class="form-label">Status <span class="text-danger">*</span></label>
                         <select name="status" class="form-control add-status-select" required onchange="toggleExitDateField(this, 'add')">
                             <option value="">Select Status</option>
                             <option value="Working">Working</option>
@@ -729,11 +767,11 @@ $employee_limit_reached = $current_employee_count >= MAX_EMPLOYEES_LIMIT;
                         </select>
                     </div>
                     <div class="col-md-3" id="addExitDateField" style="display:none;">
-                        <label class="form-label">Date of Exit <span class="text-danger"></span></label>
+                        <label class="form-label">Date of Exit <span class="text-danger">*</span></label>
                         <input type="date" name="date_of_exit" class="form-control add-exit-date">
                     </div>
                     <div class="col-md-3">
-                        <label class="form-label">Week Off</label>
+                        <label class="form-label">Week Off <span class="text-danger">*</span></label>
                         <select name="week_off" class="form-control" required>
                             <option value="">Select Day</option>
                             <option value="Monday">Monday</option>
@@ -746,7 +784,7 @@ $employee_limit_reached = $current_employee_count >= MAX_EMPLOYEES_LIMIT;
                         </select>
                     </div>
                     <div class="col-md-6">
-                        <label class="form-label">Address</label>
+                        <label class="form-label">Address <span class="text-muted small">(optional)</span></label>
                         <textarea name="address" class="form-control" rows="2" placeholder="Enter residential address"></textarea>
                     </div>
                     <div class="col-md-4">
@@ -773,14 +811,14 @@ $employee_limit_reached = $current_employee_count >= MAX_EMPLOYEES_LIMIT;
                             <div class="card-body">
                                 <div class="row g-3">
                                     <div class="col-md-4">
-                                        <label class="form-label">Bank Account Number</label>
+                                        <label class="form-label">Bank Account Number <span class="text-muted small">(optional)</span></label>
                                         <input type="text" name="bank_account_number" class="form-control" placeholder="Enter bank account number"
                                             maxlength="30" pattern="[0-9]{6,30}"
                                             oninput="this.value=this.value.replace(/[^0-9]/g,'').slice(0,30);"
                                             title="Bank account number should contain digits only">
                                     </div>
                                     <div class="col-md-4">
-                                        <label class="form-label">IFSC Code</label>
+                                        <label class="form-label">IFSC Code <span class="text-muted small">(optional)</span></label>
                                         <input type="text" name="bank_ifsc_code" class="form-control" placeholder="e.g., SBIN0001234"
                                             maxlength="11" pattern="[A-Za-z]{4}0[A-Za-z0-9]{6}"
                                             oninput="this.value=this.value.toUpperCase().slice(0,11);"
@@ -977,7 +1015,7 @@ $employee_limit_reached = $current_employee_count >= MAX_EMPLOYEES_LIMIT;
                         </div>
                     </div>
                     <div class="col-12">
-                        <button type="submit" name="add_employee" class="btn btn-success">✓ Add Employee</button>
+                        <button type="submit" name="add_employee" class="btn btn-success" id="addEmployeeSubmit">✓ Add Employee</button>
                         <button type="button" class="btn btn-secondary" onclick="toggleForm()">✕ Cancel</button>
                     </div>
                 </form>
@@ -1059,7 +1097,7 @@ $employee_limit_reached = $current_employee_count >= MAX_EMPLOYEES_LIMIT;
         <?php
         if (isset($_GET['view_employee'])) {
             $view_id = (int)$_GET['view_employee'];
-            $stmt_view = $conn->prepare("SELECT id, name, email, employee_id, company, phone, department, shift_time, location, date_of_joining, date_of_exit, status, sex, week_off, aadhar_number, pan_number, alternate_number, address, bank_account_number, bank_ifsc_code FROM users WHERE id = ? AND role = 'employee'");
+            $stmt_view = $conn->prepare("SELECT id, name, email, employee_id, company, phone, department, shift_time, location, date_of_joining, date_of_exit, status, sex, week_off, aadhar_number, pan_number, family_member_name, alternate_number, address, bank_account_number, bank_ifsc_code FROM users WHERE id = ? AND role = 'employee'");
             $stmt_view->bind_param("i", $view_id);
             $stmt_view->execute();
             $result_view = $stmt_view->get_result();
@@ -1135,7 +1173,8 @@ $employee_limit_reached = $current_employee_count >= MAX_EMPLOYEES_LIMIT;
                             <div class="row mb-3">
                                 <div class="col-md-4"><strong>Aadhar Number:</strong> <?php echo htmlspecialchars($emp['aadhar_number'] ?? '') ?: 'N/A'; ?></div>
                                 <div class="col-md-4"><strong>PAN Number:</strong> <?php echo htmlspecialchars($emp['pan_number'] ?? '') ?: 'N/A'; ?></div>
-                                <div class="col-md-4"><strong>Alternative Number:</strong> <?php echo htmlspecialchars($emp['alternate_number'] ?? '') ?: 'N/A'; ?></div>
+                                <div class="col-md-4"><strong>Family Member Name:</strong> <?php echo htmlspecialchars($emp['family_member_name'] ?? '') ?: 'N/A'; ?></div>
+                                <div class="col-md-4"><strong>Family Contact Number:</strong> <?php echo htmlspecialchars($emp['alternate_number'] ?? '') ?: 'N/A'; ?></div>
                                 <div class="col-md-6"><strong>Bank Account Number:</strong> <?php echo htmlspecialchars($emp['bank_account_number'] ?? '') ?: 'N/A'; ?></div>
                                 <div class="col-md-6"><strong>IFSC Code:</strong> <?php echo htmlspecialchars($emp['bank_ifsc_code'] ?? '') ?: 'N/A'; ?></div>
                                 <div class="col-md-12 mt-2"><strong>Address:</strong> <?php echo htmlspecialchars($emp['address'] ?? '') ?: 'N/A'; ?></div>
@@ -1561,6 +1600,7 @@ $employee_limit_reached = $current_employee_count >= MAX_EMPLOYEES_LIMIT;
                 document.getElementById('viewWeekOff').textContent   = e.week_off || '-';
                 document.getElementById('viewAadhar').textContent    = e.aadhar_number || '-';
                 document.getElementById('viewPan').textContent       = e.pan_number || '-';
+                document.getElementById('viewFamilyName').textContent = e.family_member_name || '-';
                 document.getElementById('viewAltPhone').textContent  = e.alternate_number || '-';
                 document.getElementById('viewBankAccount').textContent = e.bank_account_number || '-';
                 document.getElementById('viewIfsc').textContent      = e.bank_ifsc_code || '-';
@@ -1678,6 +1718,86 @@ $employee_limit_reached = $current_employee_count >= MAX_EMPLOYEES_LIMIT;
             });
         }
         
+        // ── Live duplicate check ─────────────────────────────────────────────
+        // Mobile / Aadhar / PAN / bank account identify a real person, so the
+        // admin is warned in red as soon as a value clashes - no need to fill
+        // the whole form again just to find out on submit.
+        const DUPLICATE_FIELDS = ['phone', 'aadhar_number', 'pan_number', 'bank_account_number'];
+
+        function setDuplicateState(input, message) {
+            // The warning line lives right under the input, inside its column
+            let warn = input.parentElement.querySelector('.duplicate-warning');
+            if (!warn) {
+                warn = document.createElement('div');
+                warn.className = 'duplicate-warning text-danger small mt-1 fw-semibold';
+                input.parentElement.appendChild(warn);
+            }
+            if (message) {
+                warn.textContent = '⚠ ' + message;
+                input.classList.add('is-duplicate');
+                input.style.borderColor = '#dc3545';
+            } else {
+                warn.textContent = '';
+                input.classList.remove('is-duplicate');
+                input.style.borderColor = '';
+            }
+            refreshSubmitState(input.form);
+        }
+
+        // Block submitting while any clash is still on screen
+        function refreshSubmitState(form) {
+            if (!form) return;
+            const blocked = form.querySelectorAll('.is-duplicate').length > 0;
+            const btn = form.id === 'addEmployeeForm'
+                ? document.getElementById('addEmployeeSubmit')
+                : document.getElementById('editEmployeeSubmit');
+            if (btn) {
+                btn.disabled = blocked;
+                btn.title = blocked ? 'Fix the duplicate values highlighted in red' : '';
+            }
+        }
+
+        function checkDuplicate(input, excludeId) {
+            const field = input.getAttribute('name');
+            const value = input.value.trim();
+            if (value === '') { setDuplicateState(input, ''); return; }
+
+            let url = 'check_duplicate.php?field=' + encodeURIComponent(field) +
+                      '&value=' + encodeURIComponent(value);
+            if (excludeId) url += '&exclude_id=' + encodeURIComponent(excludeId);
+
+            fetch(url)
+                .then(r => r.json())
+                .then(data => {
+                    // Ignore a stale response if the admin kept typing
+                    if (input.value.trim() !== value) return;
+                    setDuplicateState(input, data.duplicate ? data.message : '');
+                })
+                .catch(() => setDuplicateState(input, ''));
+        }
+
+        function attachDuplicateChecks(form, getExcludeId) {
+            if (!form) return;
+            DUPLICATE_FIELDS.forEach(field => {
+                const input = form.querySelector('[name="' + field + '"]');
+                if (!input) return;
+                let timer = null;
+                const run = () => checkDuplicate(input, getExcludeId ? getExcludeId() : null);
+                input.addEventListener('input', () => {
+                    setDuplicateState(input, '');          // clear while typing
+                    clearTimeout(timer);
+                    timer = setTimeout(run, 400);          // check once typing settles
+                });
+                input.addEventListener('blur', run);
+            });
+        }
+
+        attachDuplicateChecks(document.getElementById('addEmployeeForm'), null);
+        attachDuplicateChecks(
+            document.getElementById('editEmployeeForm'),
+            () => document.getElementById('modalEmpId').value
+        );
+
         <?php
         if ($message) {
             $icon = 'success';
@@ -1690,7 +1810,8 @@ $employee_limit_reached = $current_employee_count >= MAX_EMPLOYEES_LIMIT;
                 $title = 'Warning';
             }
             $message_escaped = addslashes($message);
-            $then_reload = ($icon === 'success') ? ".then(()=>{ location.reload(); })" : "";
+            $back_url = 'employees.php' . ($from !== '' ? '?from=' . urlencode($from) : '');
+            $then_reload = ($icon === 'success') ? ".then(()=>{ window.location.href = '" . $back_url . "'; })" : "";
             echo "Swal.fire({
                 icon: '$icon',
                 title: '$title',
@@ -2101,9 +2222,18 @@ $employee_limit_reached = $current_employee_count >= MAX_EMPLOYEES_LIMIT;
             document.getElementById('modalWeekOff').value = empData.week_off;
             document.getElementById('modalAadhar').value = empData.aadhar_number || '';
             document.getElementById('modalPan').value = empData.pan_number || '';
+            document.getElementById('modalFamilyName').value = empData.family_member_name || '';
             document.getElementById('modalAltPhone').value = empData.alternate_number || '';
             document.getElementById('modalAddress').value = empData.address || '';
             document.getElementById('modalBankAccount').value = empData.bank_account_number || '';
+
+            // Drop any duplicate warnings left over from the last employee edited
+            document.querySelectorAll('#editEmployeeForm .duplicate-warning').forEach(w => w.textContent = '');
+            document.querySelectorAll('#editEmployeeForm .is-duplicate').forEach(i => {
+                i.classList.remove('is-duplicate');
+                i.style.borderColor = '';
+            });
+            refreshSubmitState(document.getElementById('editEmployeeForm'));
             document.getElementById('modalIfsc').value = empData.bank_ifsc_code || '';
 
             // Reset file input and show existing photo (if any) as the preview
@@ -2161,6 +2291,11 @@ $employee_limit_reached = $current_employee_count >= MAX_EMPLOYEES_LIMIT;
             // Validate form
             if (!form.checkValidity()) {
                 form.classList.add('was-validated');
+                return;
+            }
+
+            if (form.querySelectorAll('.is-duplicate').length > 0) {
+                Swal.fire('Duplicate value', 'Fix the values highlighted in red before saving.', 'error');
                 return;
             }
 
@@ -2255,7 +2390,8 @@ $employee_limit_reached = $current_employee_count >= MAX_EMPLOYEES_LIMIT;
                     <div class="row g-3 mb-3">
                         <div class="col-md-4"><strong>Aadhar Number:</strong> <span id="viewAadhar">-</span></div>
                         <div class="col-md-4"><strong>PAN Number:</strong> <span id="viewPan">-</span></div>
-                        <div class="col-md-4"><strong>Alternative Number:</strong> <span id="viewAltPhone">-</span></div>
+                        <div class="col-md-4"><strong>Family Member Name:</strong> <span id="viewFamilyName">-</span></div>
+                        <div class="col-md-4"><strong>Family Contact Number:</strong> <span id="viewAltPhone">-</span></div>
                         <div class="col-md-6"><strong>Bank Account Number:</strong> <span id="viewBankAccount">-</span></div>
                         <div class="col-md-6"><strong>IFSC Code:</strong> <span id="viewIfsc">-</span></div>
                         <div class="col-md-12"><strong>Address:</strong> <span id="viewAddress">-</span></div>
@@ -2352,7 +2488,7 @@ $employee_limit_reached = $current_employee_count >= MAX_EMPLOYEES_LIMIT;
         <div class="modal-dialog modal-lg">
             <div class="modal-content">
                 <div class="modal-header bg-warning text-dark">
-                    <h5 class="modal-title" id="editEmployeeModalLabel">✎ Edit Employee</h5>
+                    <h5 class="modal-title" id="editEmployeeModalLabel">✎ Edit Employee <small class="fw-normal"><span class="text-danger">*</span> mandatory</small></h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
@@ -2361,11 +2497,11 @@ $employee_limit_reached = $current_employee_count >= MAX_EMPLOYEES_LIMIT;
                         <input type="hidden" name="update_employee" value="1">
                         
                         <div class="col-md-4">
-                            <label class="form-label">Employee ID</label>
+                            <label class="form-label">Employee ID <span class="text-danger">*</span></label>
                             <input type="text" name="employee_id" id="modalEmployeeId" class="form-control" required>
                         </div>
                         <div class="col-md-4">
-                            <label class="form-label">Full Name</label>
+                            <label class="form-label">Full Name <span class="text-danger">*</span></label>
                             <input type="text" name="name" id="modalName" class="form-control" required>
                         </div>
                         <div class="col-md-4">
@@ -2374,18 +2510,24 @@ $employee_limit_reached = $current_employee_count >= MAX_EMPLOYEES_LIMIT;
                         </div>
                         
                         <div class="col-md-4">
-                            <label class="form-label">Phone Number</label>
+                            <label class="form-label">Phone Number <span class="text-danger">*</span></label>
                             <input type="tel" name="phone" id="modalPhone" class="form-control" required>
                         </div>
                         <div class="col-md-4">
-                            <label class="form-label">Alternative Number</label>
-                            <input type="tel" name="alternate_number" id="modalAltPhone" class="form-control" placeholder="10-digit alternate number"
-                                maxlength="10" pattern="[0-9]{10}"
-                                oninput="this.value=this.value.replace(/[^0-9]/g,'').slice(0,10);"
-                                title="Alternative number must be exactly 10 digits">
+                            <label class="form-label">Family Member Name <span class="text-muted small">(optional)</span></label>
+                            <input type="text" name="family_member_name" id="modalFamilyName" class="form-control" placeholder="Enter family member name"
+                                oninput="this.value=this.value.replace(/[^a-zA-Z\s]/g,'');this.value=this.value.replace(/\b\w/g,c=>c.toUpperCase());"
+                                title="Name should contain letters only">
                         </div>
                         <div class="col-md-4">
-                            <label class="form-label">Gender</label>
+                            <label class="form-label">Family Contact Number <span class="text-muted small">(optional)</span></label>
+                            <input type="tel" name="alternate_number" id="modalAltPhone" class="form-control" placeholder="10-digit family contact number"
+                                maxlength="10" pattern="[0-9]{10}"
+                                oninput="this.value=this.value.replace(/[^0-9]/g,'').slice(0,10);"
+                                title="Family contact number must be exactly 10 digits">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Gender <span class="text-danger">*</span></label>
                             <select name="sex" id="modalSex" class="form-control" required>
                                 <option value="">Select Gender</option>
                                 <option value="Male">Male</option>
@@ -2394,51 +2536,51 @@ $employee_limit_reached = $current_employee_count >= MAX_EMPLOYEES_LIMIT;
                             </select>
                         </div>
                         <div class="col-md-4">
-                            <label class="form-label">Project</label>
+                            <label class="form-label">Project <span class="text-danger">*</span></label>
                             <select name="department" id="modalDepartment" class="form-control" required>
                                 <option value="">Select Project</option>
                             </select>
                         </div>
                         
                         <div class="col-md-4">
-                            <label class="form-label">Company</label>
+                            <label class="form-label">Company <span class="text-danger">*</span></label>
                             <select name="company" id="modalCompany" class="form-control" required>
                                 <option value="">Select Company</option>
                             </select>
                         </div>
                         <div class="col-md-4">
-                            <label class="form-label">Aadhar Number</label>
+                            <label class="form-label">Aadhar Number <span class="text-muted small">(optional)</span></label>
                             <input type="text" name="aadhar_number" id="modalAadhar" class="form-control" placeholder="12-digit Aadhar number"
                                 maxlength="12" pattern="[0-9]{12}"
                                 oninput="this.value=this.value.replace(/[^0-9]/g,'').slice(0,12);"
                                 title="Aadhar number must be exactly 12 digits">
                         </div>
                         <div class="col-md-4">
-                            <label class="form-label">PAN Number</label>
+                            <label class="form-label">PAN Number <span class="text-muted small">(optional)</span></label>
                             <input type="text" name="pan_number" id="modalPan" class="form-control" placeholder="e.g., ABCDE1234F"
                                 maxlength="10" pattern="[A-Za-z]{5}[0-9]{4}[A-Za-z]{1}"
                                 oninput="this.value=this.value.toUpperCase().slice(0,10);"
                                 title="PAN format: 5 letters, 4 digits, 1 letter">
                         </div>
                         <div class="col-md-4">
-                            <label class="form-label">Shift Time</label>
+                            <label class="form-label">Shift Time <span class="text-danger">*</span></label>
                             <select name="shift_time" id="modalShiftTime" class="form-control" required>
                                 <option value="">Select Shift</option>
                             </select>
                         </div>
                         <div class="col-md-4">
-                            <label class="form-label">Location</label>
+                            <label class="form-label">Location <span class="text-danger">*</span></label>
                             <select name="location" id="modalLocation" class="form-control" required>
                                 <option value="">Select Location</option>
                             </select>
                         </div>
                         
                         <div class="col-md-4">
-                            <label class="form-label">Date of Joining</label>
+                            <label class="form-label">Date of Joining <span class="text-danger">*</span></label>
                             <input type="date" name="date_of_joining" id="modalDateOfJoining" class="form-control" required>
                         </div>
                         <div class="col-md-4">
-                            <label class="form-label">Status</label>
+                            <label class="form-label">Status <span class="text-danger">*</span></label>
                             <select name="status" id="modalStatus" class="form-control modal-status-select" required onchange="toggleExitDateFieldModal(this)">
                                 <option value="">Select Status</option>
                                 <option value="Working">Working</option>
@@ -2451,7 +2593,7 @@ $employee_limit_reached = $current_employee_count >= MAX_EMPLOYEES_LIMIT;
                         </div>
                         
                         <div class="col-md-6">
-                            <label class="form-label">Week Off</label>
+                            <label class="form-label">Week Off <span class="text-danger">*</span></label>
                             <select name="week_off" id="modalWeekOff" class="form-control" required>
                                 <option value="">Select Day</option>
                                 <option value="Monday">Monday</option>
@@ -2464,7 +2606,7 @@ $employee_limit_reached = $current_employee_count >= MAX_EMPLOYEES_LIMIT;
                             </select>
                         </div>
                         <div class="col-md-6">
-                            <label class="form-label">Address</label>
+                            <label class="form-label">Address <span class="text-muted small">(optional)</span></label>
                             <textarea name="address" id="modalAddress" class="form-control" rows="2" placeholder="Enter residential address"></textarea>
                         </div>
                         <div class="col-md-4">
@@ -2492,14 +2634,14 @@ $employee_limit_reached = $current_employee_count >= MAX_EMPLOYEES_LIMIT;
                                 <div class="card-body">
                                     <div class="row g-3">
                                         <div class="col-md-4">
-                                            <label class="form-label">Bank Account Number</label>
+                                            <label class="form-label">Bank Account Number <span class="text-muted small">(optional)</span></label>
                                             <input type="text" name="bank_account_number" id="modalBankAccount" class="form-control" placeholder="Enter bank account number"
                                                 maxlength="30" pattern="[0-9]{6,30}"
                                                 oninput="this.value=this.value.replace(/[^0-9]/g,'').slice(0,30);"
                                                 title="Bank account number should contain digits only">
                                         </div>
                                         <div class="col-md-4">
-                                            <label class="form-label">IFSC Code</label>
+                                            <label class="form-label">IFSC Code <span class="text-muted small">(optional)</span></label>
                                             <input type="text" name="bank_ifsc_code" id="modalIfsc" class="form-control" placeholder="e.g., SBIN0001234"
                                                 maxlength="11" pattern="[A-Za-z]{4}0[A-Za-z0-9]{6}"
                                                 oninput="this.value=this.value.toUpperCase().slice(0,11);"
@@ -2642,7 +2784,7 @@ $employee_limit_reached = $current_employee_count >= MAX_EMPLOYEES_LIMIT;
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="button" class="btn btn-success" onclick="submitEditForm()">✓ Update Employee</button>
+                    <button type="button" class="btn btn-success" id="editEmployeeSubmit" onclick="submitEditForm()">✓ Update Employee</button>
                 </div>
             </div>
         </div>

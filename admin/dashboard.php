@@ -124,6 +124,19 @@ $dm_greeting = $dm_hour < 12 ? 'Good morning' : ($dm_hour < 17 ? 'Good afternoon
             </div>
         </div>
 
+        <!-- Create Supervisor Card -->
+        <div class="col-md-6 col-lg-4">
+            <div class="card dashboard-card shadow" style="border-left-color: #6f42c1;">
+                <div class="card-body">
+                    <h5 class="card-title">🧑‍✈️ Create Supervisor</h5>
+                    <p class="card-text text-muted">Create supervisors who punch attendance for employees at a location.</p>
+                    <div class="card-links">
+                        <a href="supervisors.php" class="btn btn-sm text-white" style="background:#6f42c1;">Manage Supervisors</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Manage Employee Passwords Card -->
         <div class="col-md-6 col-lg-4">
             <div class="card dashboard-card shadow" style="border-left-color: #dc3545;">
