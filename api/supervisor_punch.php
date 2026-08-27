@@ -1,21 +1,25 @@
 <?php
 /**
- * Browser front door for a supervisor punch (session-authenticated).
- * The logic lives in config/supervisor_punch.php, shared with
- * api/supervisor_punch.php so the app and the web write identical rows.
+ * Punch In / Punch Out made by a supervisor on behalf of an employee, for the
+ * Flutter app. Same logic as the web supervisor dashboard - both call
+ * supervisor_do_punch() - so a punch made in the app is indistinguishable in
+ * the database from one made in the browser.
  *
- * POST employee_id, action=in|out, selfie_image (base64 data URL), lat, lng
+ * POST employee_id, action=in|out, selfie_image (base64 data URL), lat, lng (optional)
+ * Auth: Bearer token from auth/api_login.php, belonging to a supervisor.
  */
 date_default_timezone_set('Asia/Kolkata');
 header('Content-Type: application/json');
 
-session_start();
 require_once '../config/db.php';
+require_once '../config/api_auth.php';
 require_once '../config/supervisor_punch.php';
 
-if (!isset($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'supervisor') {
+$authUser = api_authenticate_flexible($conn);
+
+if (($authUser['role'] ?? '') !== 'supervisor') {
     http_response_code(403);
-    echo json_encode(['success' => false, 'message' => 'Please log in as a supervisor.']);
+    echo json_encode(['success' => false, 'message' => 'This endpoint is for supervisor accounts only.']);
     exit;
 }
 
@@ -25,7 +29,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     exit;
 }
 
-$supervisor_id = (int)$_SESSION['user_id'];
+$supervisor_id = (int)$authUser['id'];
 $location = supervisor_location($conn, $supervisor_id);
 
 if ($location === null) {
@@ -33,7 +37,7 @@ if ($location === null) {
     exit;
 }
 
-echo json_encode(supervisor_do_punch(
+$result = supervisor_do_punch(
     $conn,
     $supervisor_id,
     $location,
@@ -42,4 +46,6 @@ echo json_encode(supervisor_do_punch(
     $_POST['selfie_image'] ?? '',
     isset($_POST['lat']) && $_POST['lat'] !== '' ? (float)$_POST['lat'] : null,
     isset($_POST['lng']) && $_POST['lng'] !== '' ? (float)$_POST['lng'] : null
-));
+);
+
+echo json_encode($result);

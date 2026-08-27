@@ -15,11 +15,30 @@ function api_generate_token(): string {
 }
 
 /**
+ * Creates auth_tokens if it is missing, so token login works on a fresh
+ * database without anyone remembering to run config/create_auth_tokens_table.php.
+ */
+function api_ensure_tokens_table(mysqli $conn): void {
+    $conn->query(
+        "CREATE TABLE IF NOT EXISTS auth_tokens (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            user_id INT NOT NULL,
+            token VARCHAR(64) NOT NULL UNIQUE,
+            device_info VARCHAR(255) DEFAULT NULL,
+            created_at DATETIME NOT NULL,
+            expires_at DATETIME NOT NULL,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        ) ENGINE=InnoDB"
+    );
+}
+
+/**
  * Validates the Bearer token from the Authorization header (or ?token=
  * query param, useful for quick testing) and returns the associated user
  * row. Sends a 401 JSON response and exits if missing/invalid/expired.
  */
 function api_authenticate(mysqli $conn): array {
+    api_ensure_tokens_table($conn);
     $token = null;
 
     $headers = function_exists('getallheaders') ? getallheaders() : [];

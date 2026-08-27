@@ -2,7 +2,7 @@
 session_start();
 require_once '../config/db.php';
 require_once '../config/supervisor_setup.php';
-require_once '../config/attendance_geo.php';
+require_once '../config/supervisor_punch.php';
 
 date_default_timezone_set('Asia/Kolkata');
 
@@ -26,27 +26,11 @@ if (!$supervisor) {
     exit();
 }
 
-$location  = $supervisor['location'] ?? '';
-$employees = supervisor_employees($conn, $location);
+$location = $supervisor['location'] ?? '';
 
-// Today's punch state for every employee, so each card shows it without a round trip
-$today = attendance_shift_date();
-$punch_state = [];
-if (!empty($employees)) {
-    $ids = implode(',', array_map(fn($e) => (int)$e['id'], $employees));
-    $res = $conn->query(
-        "SELECT user_id,
-                MAX(punch_in)  AS last_in,
-                MAX(punch_out) AS last_out,
-                SUM(punch_in IS NOT NULL AND punch_out IS NULL) AS open_sessions
-         FROM attendance
-         WHERE date = '" . $conn->real_escape_string($today) . "' AND user_id IN ($ids)
-         GROUP BY user_id"
-    );
-    while ($row = $res->fetch_assoc()) {
-        $punch_state[(int)$row['user_id']] = $row;
-    }
-}
+// Exactly the list the app gets from api/supervisor_employees.php
+$employees = supervisor_employee_list($conn, $location);
+
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -179,19 +163,7 @@ if (!empty($employees)) {
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 <script>
-    const EMPLOYEES = <?php echo json_encode(array_map(function ($e) use ($punch_state) {
-        $st = $punch_state[(int)$e['id']] ?? null;
-        return [
-            'id'          => (int)$e['id'],
-            'name'        => $e['name'],
-            'employee_id' => $e['employee_id'] ?? '',
-            'department'  => $e['department'] ?? '',
-            'shift_time'  => $e['shift_time'] ?? '',
-            'punched_in'  => $st ? ((int)$st['open_sessions'] > 0) : false,
-            'last_in'     => $st && $st['last_in']  ? date('h:i A', strtotime($st['last_in']))  : null,
-            'last_out'    => $st && $st['last_out'] ? date('h:i A', strtotime($st['last_out'])) : null,
-        ];
-    }, $employees), JSON_UNESCAPED_UNICODE); ?>;
+    const EMPLOYEES = <?php echo json_encode($employees, JSON_UNESCAPED_UNICODE); ?>;
 
     let selectedEmployee = null;
     let capturedImage = null;

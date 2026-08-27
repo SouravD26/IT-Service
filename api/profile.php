@@ -9,7 +9,7 @@ require_once '../config/api_auth.php';
 
 $authUser = api_authenticate_flexible($conn);
 
-$stmt = $conn->prepare("SELECT id, name, employee_id, phone, email, role, department, date_of_joining, week_off, geo_restricted, status FROM users WHERE id = ?");
+$stmt = $conn->prepare("SELECT id, name, employee_id, phone, email, role, department, date_of_joining, week_off, geo_restricted, status, location FROM users WHERE id = ?");
 $stmt->bind_param("i", $authUser['id']);
 $stmt->execute();
 $user = $stmt->get_result()->fetch_assoc();

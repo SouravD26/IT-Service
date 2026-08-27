@@ -26,7 +26,7 @@ if (empty($phone) || strlen($phone) < 10 || empty($password)) {
     exit;
 }
 
-$stmt = $conn->prepare("SELECT id, phone, password, role, name, email, department, employee_id FROM users WHERE phone = ?");
+$stmt = $conn->prepare("SELECT id, phone, password, role, name, email, department, employee_id, location FROM users WHERE phone = ?");
 $stmt->bind_param("s", $phone);
 $stmt->execute();
 $result = $stmt->get_result();
@@ -46,6 +46,7 @@ if (!password_verify($password, $user['password'])) {
 }
 
 // Issue a token valid for 30 days
+api_ensure_tokens_table($conn);
 $token = api_generate_token();
 $device_info = trim($_POST['device_info'] ?? ($_SERVER['HTTP_USER_AGENT'] ?? ''));
 
