@@ -81,37 +81,22 @@ $from_date_obj = new DateTime($from_date);
 $to_date_obj = new DateTime($to_date);
 
 // Helper function to check status for a date (date string version)
+// Status codes follow the company attendance policy (config/attendance_policy.php):
+//   P = full day, HD = half day, A = absent, WO = week off, OD = on duty, ADJ = comp off adjusted
 function getStatusForDateByString($conn, $user_id, $date_str, $week_off) {
-    $date_obj = new DateTime($date_str);
-    $day_name = $date_obj->format('l');
-    
-    if ($week_off === $day_name) {
-        return 'WO';
+    require_once __DIR__ . '/../config/attendance_policy.php';
+
+    $result = attendance_day_result($conn, (int)$user_id, $date_str);
+
+    switch ($result['status']) {
+        case 'Week Off': return 'WO';
+        case 'OD':       return 'OD';
+        case 'Comp Off': return 'ADJ';
+        case 'Leave':    return 'L';
+        case 'Present':  return 'P';
+        case 'Half Day': return 'HD';
+        default:         return 'A';
     }
-    
-    $stmt_od = $conn->prepare("SELECT id FROM od_records WHERE user_id = ? AND od_date = ?");
-    $stmt_od->bind_param("is", $user_id, $date_str);
-    $stmt_od->execute();
-    $result_od = $stmt_od->get_result();
-    if ($result_od->num_rows > 0) {
-        $stmt_od->close();
-        return 'OD';
-    }
-    $stmt_od->close();
-    
-    $stmt_att = $conn->prepare("SELECT status FROM attendance WHERE user_id = ? AND DATE(date) = ?");
-    $stmt_att->bind_param("is", $user_id, $date_str);
-    $stmt_att->execute();
-    $result_att = $stmt_att->get_result();
-    
-    if ($result_att->num_rows > 0) {
-        $att_row = $result_att->fetch_assoc();
-        $stmt_att->close();
-        return ($att_row['status'] === 'Present' || $att_row['status'] === 'Late') ? 'P' : 'A';
-    }
-    
-    $stmt_att->close();
-    return 'A';
 }
 
 // Helper function to check status for a date (backward compatible version)

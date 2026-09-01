@@ -108,6 +108,12 @@ $stmt = $conn->prepare($sql);
 $stmt->bind_param($list_types, ...$list_params);
 $stmt->execute();
 $result = $stmt->get_result();
+
+// Apply the company attendance policy: the badge shows the day the employee
+// actually earned (Present / Half Day / Absent), not the raw stored flag.
+require_once __DIR__ . '/../config/attendance_policy.php';
+$page_rows = $result->fetch_all(MYSQLI_ASSOC);
+$status_map = attendance_status_map($conn, $page_rows);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -249,7 +255,7 @@ $result = $stmt->get_result();
             <h5 class="mb-0">📋 Records</h5>
         </div>
         <div class="card-body">
-            <?php if ($result->num_rows > 0): ?>
+            <?php if (!empty($page_rows)): ?>
                 <div class="table-responsive">
                     <table class="table table-striped table-hover table-sm">
                         <thead class="table-dark">
@@ -268,7 +274,7 @@ $result = $stmt->get_result();
                             </tr>
                         </thead>
                         <tbody>
-                            <?php while ($row = $result->fetch_assoc()): ?>
+                            <?php foreach ($page_rows as $row): ?>
                                 <?php
                                     $emp_photos = glob("../uploads/employee_photos/" . $row['user_id'] . ".*");
                                     $emp_photo_url = !empty($emp_photos) ? "../uploads/employee_photos/" . basename($emp_photos[0]) : '';
@@ -347,20 +353,17 @@ $result = $stmt->get_result();
                                     <td><small><?php echo htmlspecialchars($row['punch_out_location'] ?? '-'); ?></small></td>
                                     
                                     <td>
-                                        <?php 
-                                        $status = $row['status'] ?? 'Absent';
-                                        $badge_class = match($status) {
-                                            'Present' => 'bg-success',
-                                            'Late' => 'bg-warning',
-                                            'Leave' => 'bg-info',
-                                            'Absent' => 'bg-danger',
-                                            default => 'bg-secondary'
-                                        };
+                                        <?php
+                                        $derived = $status_map[$row['user_id'] . '|' . $row['date']]
+                                            ?? ['status' => $row['status'] ?? 'Absent', 'note' => ''];
                                         ?>
-                                        <span class="badge <?php echo $badge_class; ?>"><?php echo htmlspecialchars($status); ?></span>
+                                        <span class="badge <?php echo attendance_status_badge($derived['status']); ?>"
+                                              title="<?php echo htmlspecialchars($derived['note']); ?>">
+                                            <?php echo htmlspecialchars($derived['status']); ?>
+                                        </span>
                                     </td>
                                 </tr>
-                            <?php endwhile; ?>
+                            <?php endforeach; ?>
                         </tbody>
                     </table>
                 </div>

@@ -236,6 +236,21 @@ $dm_greeting = $dm_hour < 12 ? 'Good morning' : ($dm_hour < 17 ? 'Good afternoon
         </div>
         <?php endif; ?>
 
+        <?php if (adminCan('attendance_policy', $admin_rights)): ?>
+        <!-- Attendance Policy Card -->
+        <div class="col-md-6 col-lg-4">
+            <div class="card dashboard-card shadow" style="border-left-color: #0d6efd;">
+                <div class="card-body">
+                    <h5 class="card-title">⚖️ Set Attendance Policy</h5>
+                    <p class="card-text text-muted">Single punch, half day hours, and what counts as a full day.</p>
+                    <div class="card-links">
+                        <a href="attendance_policy.php" class="btn btn-primary btn-sm">Set Policy</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <?php endif; ?>
+
         <?php if (adminCan('manage_departments', $admin_rights)): ?>
         <!-- Departments Card -->
         <div class="col-md-6 col-lg-4">

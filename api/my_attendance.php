@@ -44,10 +44,27 @@ foreach ($records as &$r) {
 }
 unset($r);
 
+// The company attendance policy decides the day actually earned, so the app
+// shows the same Present / Half Day / Absent the payslip will pay for.
+require_once '../config/attendance_policy.php';
+$day_status = [];
+if (!empty($records)) {
+    $dates = array_column($records, 'date');
+    $day_status = attendance_day_results($conn, $user_id, min($dates), max($dates));
+}
+foreach ($records as &$r) {
+    $d = $day_status[$r['date']] ?? null;
+    $r['day_status'] = $d['status'] ?? null;   // Present | Half Day | Absent | Week Off | Leave | OD | Comp Off
+    $r['day_credit'] = $d['credit'] ?? null;   // 1 | 0.5 | 0
+    $r['day_note']   = $d['note']   ?? null;
+}
+unset($r);
+
 echo json_encode([
     'success' => true,
     'month' => $filter_month,
     'year' => $filter_year,
     'count' => count($records),
+    'days' => $day_status,
     'records' => $records
 ]);

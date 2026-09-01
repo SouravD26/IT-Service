@@ -82,6 +82,7 @@ $available_rights = [
     'leave_management'   => '🗓️ Leave Management',
     'manage_admins'      => '👤 Manage Admins',
     'manage_supervisors' => '🧑‍✈️ Create Supervisor',
+    'attendance_policy'  => '⚖️ Attendance Policy',
 ];
 
 // Handle Add Admin

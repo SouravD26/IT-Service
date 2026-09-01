@@ -239,12 +239,28 @@ function calculateHours($punch_in, $punch_out, $date) {
                             // Merge both records and sort by date (descending)
                             $all_dates = array_unique(array_merge(array_keys($attendance_records), array_keys($co_records)));
                             rsort($all_dates);
+
+                            // Company attendance policy decides the day actually earned
+                            require_once __DIR__ . '/../config/attendance_policy.php';
+                            $day_statuses = [];
+                            if (!empty($all_dates)) {
+                                $day_statuses = attendance_day_results($conn, $user_id, min($all_dates), max($all_dates));
+                            }
                             
                             // Display records
                             foreach ($all_dates as $date): 
                                 // Date header
+                                $day = $day_statuses[$date] ?? null;
                                 echo "<tr class='table-light'>";
-                                echo "<td colspan='3'><strong>📅 " . htmlspecialchars($date) . "</strong></td>";
+                                echo "<td colspan='3'><strong>📅 " . htmlspecialchars($date) . "</strong>";
+                                if ($day) {
+                                    echo " <span class='badge " . attendance_status_badge($day['status']) . "' title='"
+                                       . htmlspecialchars($day['note']) . "'>" . htmlspecialchars($day['status']) . "</span>";
+                                    if ($day['hours'] > 0) {
+                                        echo " <small class='text-muted'>" . $day['hours'] . "h worked</small>";
+                                    }
+                                }
+                                echo "</td>";
                                 echo "</tr>";
                                 
                                 // Check if this date has CO record

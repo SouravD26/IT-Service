@@ -21,76 +21,23 @@ $conn->query("CREATE TABLE IF NOT EXISTS leave_applications (
 // Must run before any HTML is emitted, otherwise the JSON response gets glued to the full page markup.
 if (isset($_GET['ajax']) && $_GET['ajax'] === 'leaves') {
     header('Content-Type: application/json');
+    require_once __DIR__ . '/../config/pay_period.php';
+
     $uid   = (int)($_GET['user_id'] ?? 0);
-    $month = $_GET['month'] ?? date('Y-m'); // "2026-08"
-    [$y,$m] = explode('-', $month);
-    $start = "$y-$m-01";
-    $end   = date('Y-m-t', strtotime($start)); // last day of month
-    $daysInMonth = (int)date('t', strtotime($start));
+    $month = $_GET['month'] ?? date('Y-m'); // "2026-08" = the 26 Aug .. 25 Sep pay period
 
-    $weekOff = '';
-    $wst = $conn->prepare("SELECT week_off FROM users WHERE id = ?");
-    $wst->bind_param("i", $uid);
-    $wst->execute();
-    $weekOff = $wst->get_result()->fetch_assoc()['week_off'] ?? '';
-    $wst->close();
+    $result = pay_period_paid_days($conn, $uid, $month);
 
-    // Dates the employee actually attended (Present/Late)
-    $presentDates = [];
-    $ast = $conn->prepare("SELECT DISTINCT date FROM attendance WHERE user_id=? AND date BETWEEN ? AND ? AND status IN ('Present','Late')");
-    $ast->bind_param("iss", $uid, $start, $end);
-    $ast->execute();
-    foreach ($ast->get_result() as $r) { $presentDates[$r['date']] = true; }
-    $ast->close();
-
-    // On-Duty dates (paid)
-    $odDates = [];
-    $ost = $conn->prepare("SELECT DISTINCT od_date FROM od_records WHERE user_id=? AND od_date BETWEEN ? AND ?");
-    $ost->bind_param("iss", $uid, $start, $end);
-    $ost->execute();
-    foreach ($ost->get_result() as $r) { $odDates[$r['od_date']] = true; }
-    $ost->close();
-
-    // Comp-off adjusted dates (paid)
-    $adjDates = [];
-    $cst = $conn->prepare("SELECT DISTINCT comp_off_date FROM comp_off_requests WHERE user_id=? AND comp_off_date BETWEEN ? AND ?");
-    $cst->bind_param("iss", $uid, $start, $end);
-    $cst->execute();
-    foreach ($cst->get_result() as $r) { $adjDates[$r['comp_off_date']] = true; }
-    $cst->close();
-
-    // Approved leave dates, excluding Unpaid Leave (paid)
-    $paidLeaveDates = [];
-    $lst = $conn->prepare("SELECT leave_type, start_date, end_date FROM leave_applications WHERE user_id=? AND status='Approved' AND start_date <= ? AND end_date >= ?");
-    $lst->bind_param("iss", $uid, $end, $start);
-    $lst->execute();
-    foreach ($lst->get_result() as $r) {
-        if ($r['leave_type'] === 'Unpaid Leave') continue;
-        $d = max(strtotime($r['start_date']), strtotime($start));
-        $lastDay = min(strtotime($r['end_date']), strtotime($end));
-        while ($d <= $lastDay) {
-            $paidLeaveDates[date('Y-m-d', $d)] = true;
-            $d = strtotime('+1 day', $d);
-        }
-    }
-    $lst->close();
-
-    // Walk every day of the month: paid if worked, on week-off, OD, comp-off adjusted, or paid leave
-    $paidDays = 0;
-    for ($d = 1; $d <= $daysInMonth; $d++) {
-        $dateStr = sprintf('%s-%s-%02d', $y, $m, $d);
-        $dayName = date('l', strtotime($dateStr));
-        if ($dayName === $weekOff
-            || isset($presentDates[$dateStr])
-            || isset($odDates[$dateStr])
-            || isset($adjDates[$dateStr])
-            || isset($paidLeaveDates[$dateStr])) {
-            $paidDays++;
-        }
-    }
-    $absentDays = $daysInMonth - $paidDays;
-
-    echo json_encode(['absent_days' => $absentDays, 'paid_days' => $paidDays, 'days_in_month' => $daysInMonth]);
+    echo json_encode([
+        'absent_days'    => $result['absent_days'],
+        'paid_days'      => $result['paid_days'],
+        'days_in_month'  => $result['days_in_period'],  // kept for the existing front-end
+        'days_in_period' => $result['days_in_period'],
+        'half_days'      => $result['half_days'],
+        'period_start'   => $result['start'],
+        'period_end'     => $result['end'],
+        'period_label'   => $result['label'],
+    ]);
     exit;
 }
 
@@ -310,14 +257,20 @@ async function generateSlip(empId, emp) {
     const monthVal = document.getElementById('slipMonth_' + empId).value; // "2026-08"
     const [yr, mo] = monthVal.split('-').map(Number);
     const monthName = new Date(yr, mo-1, 1).toLocaleString('en-IN',{month:'long', year:'numeric'});
-    const daysInMonth = new Date(yr, mo, 0).getDate();
 
-    // Fetch rejected leaves for that month
+    // Pay runs 26th -> 25th, so the period length and label come from the
+    // server (config/pay_period.php), never from the calendar month.
     let absentDays = 0, deductionAmt = 0;
+    let daysInMonth = 30;
+    let periodLabel = monthName;
+    let periodEnd = null;
     try {
         const resp = await fetch(`salary_slip.php?ajax=leaves&user_id=${empId}&month=${monthVal}`);
         const data = await resp.json();
-        absentDays = data.absent_days || 0;
+        absentDays  = data.absent_days || 0;
+        daysInMonth = data.days_in_period || data.days_in_month || daysInMonth;
+        periodLabel = data.period_label || periodLabel;
+        periodEnd   = data.period_end || null;
     } catch(e){}
 
     // Parse earnings
@@ -355,7 +308,9 @@ async function generateSlip(empId, emp) {
 
     const netPay = grossEarnings - totalDeductions;
     const paidDays = daysInMonth - absentDays;
-    const payDate = new Date(yr, mo-1, 1).toLocaleString('en-IN',{day:'2-digit',month:'short',year:'numeric'});
+    const payDate = periodEnd
+        ? new Date(periodEnd + 'T00:00:00').toLocaleString('en-IN',{day:'2-digit',month:'short',year:'numeric'})
+        : new Date(yr, mo-1, 1).toLocaleString('en-IN',{day:'2-digit',month:'short',year:'numeric'});
 
     const slip = `
     <div class="slip-wrap" style="padding:0;">
@@ -370,7 +325,7 @@ async function generateSlip(empId, emp) {
           <div class="meta-item"><label>Employee Name</label><span>${escHtml(emp.name)}</span></div>
           <div class="meta-item"><label>Employee ID</label><span>${escHtml(emp.employee_id||'-')}</span></div>
           <div class="meta-item"><label>Department</label><span>${escHtml(emp.department||'-')}</span></div>
-          <div class="meta-item"><label>Pay Period</label><span>${monthName}</span></div>
+          <div class="meta-item"><label>Pay Period</label><span>${periodLabel}</span></div>
           <div class="meta-item"><label>Paid Days</label><span>${paidDays} / ${daysInMonth}</span></div>
           <div class="meta-item"><label>Loss of Pay Days</label><span>${absentDays}</span></div>
           <div class="meta-item"><label>Date of Joining</label><span>${emp.date_of_joining || '-'}</span></div>

@@ -11,6 +11,7 @@
 header('Content-Type: application/json');
 require_once '../config/db.php';
 require_once '../config/api_auth.php';
+require_once '../config/pay_period.php';
 
 $authUser = api_authenticate_flexible($conn);
 
@@ -31,10 +32,10 @@ if (!preg_match('/^\d{4}-\d{2}$/', $month)) {
     echo json_encode(['success' => false, 'message' => 'month must be in YYYY-MM format']);
     exit;
 }
-[$y, $m] = explode('-', $month);
-$start = "$y-$m-01";
-$end = date('Y-m-t', strtotime($start));
-$daysInMonth = (int)date('t', strtotime($start));
+$period      = pay_period_range($month);
+$start       = $period['start'];
+$end         = $period['end'];
+$daysInMonth = $period['days'];
 
 // Employee + salary structure
 $stmt = $conn->prepare("
@@ -60,61 +61,11 @@ if (!$emp) {
     exit;
 }
 
-$weekOff = $emp['week_off'] ?? '';
-
-// Dates the employee actually attended
-$presentDates = [];
-$ast = $conn->prepare("SELECT DISTINCT date FROM attendance WHERE user_id=? AND date BETWEEN ? AND ? AND status IN ('Present','Late')");
-$ast->bind_param("iss", $user_id, $start, $end);
-$ast->execute();
-foreach ($ast->get_result() as $r) { $presentDates[$r['date']] = true; }
-$ast->close();
-
-// On-Duty dates (paid)
-$odDates = [];
-$ost = $conn->prepare("SELECT DISTINCT od_date FROM od_records WHERE user_id=? AND od_date BETWEEN ? AND ?");
-$ost->bind_param("iss", $user_id, $start, $end);
-$ost->execute();
-foreach ($ost->get_result() as $r) { $odDates[$r['od_date']] = true; }
-$ost->close();
-
-// Comp-off adjusted dates (paid)
-$adjDates = [];
-$cst = $conn->prepare("SELECT DISTINCT comp_off_date FROM comp_off_requests WHERE user_id=? AND comp_off_date BETWEEN ? AND ?");
-$cst->bind_param("iss", $user_id, $start, $end);
-$cst->execute();
-foreach ($cst->get_result() as $r) { $adjDates[$r['comp_off_date']] = true; }
-$cst->close();
-
-// Approved paid leave dates (excludes Unpaid Leave)
-$paidLeaveDates = [];
-$lst = $conn->prepare("SELECT leave_type, start_date, end_date FROM leave_applications WHERE user_id=? AND status='Approved' AND start_date <= ? AND end_date >= ?");
-$lst->bind_param("iss", $user_id, $end, $start);
-$lst->execute();
-foreach ($lst->get_result() as $r) {
-    if ($r['leave_type'] === 'Unpaid Leave') continue;
-    $d = max(strtotime($r['start_date']), strtotime($start));
-    $lastDay = min(strtotime($r['end_date']), strtotime($end));
-    while ($d <= $lastDay) {
-        $paidLeaveDates[date('Y-m-d', $d)] = true;
-        $d = strtotime('+1 day', $d);
-    }
-}
-$lst->close();
-
-$paidDays = 0;
-for ($d = 1; $d <= $daysInMonth; $d++) {
-    $dateStr = sprintf('%s-%s-%02d', $y, $m, $d);
-    $dayName = date('l', strtotime($dateStr));
-    if ($dayName === $weekOff
-        || isset($presentDates[$dateStr])
-        || isset($odDates[$dateStr])
-        || isset($adjDates[$dateStr])
-        || isset($paidLeaveDates[$dateStr])) {
-        $paidDays++;
-    }
-}
-$absentDays = $daysInMonth - $paidDays;
+// Paid vs absent days across the pay period (shared with admin/salary_slip.php)
+$dayCount    = pay_period_paid_days($conn, $user_id, $month);
+$paidDays    = $dayCount['paid_days'];
+$absentDays  = $dayCount['absent_days'];
+$halfDays    = $dayCount['half_days'];
 
 // Earnings
 $basic = (float)$emp['basic_monthly'];
@@ -156,9 +107,14 @@ echo json_encode([
         'date_of_joining' => $emp['date_of_joining'],
     ],
     'month' => $month,
+    'period_start' => $start,
+    'period_end' => $end,
+    'period_label' => $period['label'],
     'days_in_month' => $daysInMonth,
+    'days_in_period' => $daysInMonth,
     'paid_days' => $paidDays,
     'absent_days' => $absentDays,
+    'half_days' => $halfDays,
     'earnings' => $earnings,
     'gross_earnings' => round($grossEarnings, 2),
     'deductions' => $deductions,

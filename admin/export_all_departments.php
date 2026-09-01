@@ -68,7 +68,7 @@ $selected_companies = isset($_POST['companies']) && is_array($_POST['companies']
 
 // Build SQL query to fetch employees, optionally filtering by company
 $query = "
-    SELECT id, employee_id, name, department, location, week_off, status, date_of_exit 
+    SELECT id, employee_id, name, department, location, week_off, shift_time, status, date_of_exit 
     FROM users 
     WHERE role = 'employee' AND (status = 'Working' OR status = 'Resign')
 ";
@@ -197,39 +197,34 @@ if (!empty($all_employee_ids)) {
 }
 
 // Helper function to check status for a date (using cached data)
-function getStatusForDate($user_id, $date_str, $week_off, $attendance_cache, $od_cache, $comp_off_cache) {
+// Status codes follow the company attendance policy (config/attendance_policy.php):
+//   P = full day, HD = half day, A = absent, WO = week off, OD = on duty, ADJ = comp off adjusted
+// The punch times are already cached, so the policy is applied without extra queries.
+function getStatusForDate($user_id, $date_str, $week_off, $attendance_cache, $od_cache, $comp_off_cache, $conn = null, $shift_time = null) {
+    require_once __DIR__ . '/../config/attendance_policy.php';
+
     $day_name = date('l', strtotime($date_str));
-    
     if ($week_off === $day_name) {
         return 'WO';
     }
-    
-    // Check OD records from cache
-    $od_key = $user_id . '_' . $date_str;
-    if (isset($od_cache[$od_key])) {
+
+    $key = $user_id . '_' . $date_str;
+    if (isset($od_cache[$key])) {
         return 'OD';
     }
-    
-    // Check comp off from cache
-    $comp_off_key = $user_id . '_' . $date_str;
-    $has_comp_off = isset($comp_off_cache[$comp_off_key]);
-    
-    // Check attendance from cache
-    if (isset($attendance_cache[$od_key])) {
-        $att_status = $attendance_cache[$od_key]['status'];
-        $status = ($att_status === 'Present' || $att_status === 'Late') ? 'P' : 'A';
-        // If absent but has comp off, show ADJ (adjusted)
-        if ($status === 'A' && $has_comp_off) {
-            return 'ADJ';
-        }
-        return $status;
+    $has_comp_off = isset($comp_off_cache[$key]);
+
+    if (isset($attendance_cache[$key])) {
+        $policy       = attendance_policy($conn);
+        $fullDayHours = attendance_full_day_hours($policy, $shift_time);
+        $result       = attendance_evaluate_day($attendance_cache[$key]['times'], $policy, $fullDayHours);
+
+        if ($result['status'] === 'Present')  return 'P';
+        if ($result['status'] === 'Half Day') return 'HD';
+        return $has_comp_off ? 'ADJ' : 'A';
     }
-    
-    // If no attendance record but has comp off, show ADJ
-    if ($has_comp_off) {
-        return 'ADJ';
-    }
-    return 'A';
+
+    return $has_comp_off ? 'ADJ' : 'A';
 }
 
 function extractTimeFromTimestamp($timestamp) {
@@ -381,7 +376,7 @@ function createLocationSheet($spreadsheet, $location, $employees_by_dept, $date_
                 if ($emp_resigned && new DateTime($date_str) > $resign_month_end) {
                     $status = '-';
                 } else {
-                    $status = getStatusForDate($emp['id'], $date_str, $emp['week_off'], $attendance_cache, $od_cache, $comp_off_cache);
+                    $status = getStatusForDate($emp['id'], $date_str, $emp['week_off'], $attendance_cache, $od_cache, $comp_off_cache, $conn, $emp['shift_time'] ?? null);
                 }
                 $col = Coordinate::stringFromColumnIndex($day_index + 2);
                 $sheet->setCellValue($col . $row, $status);
