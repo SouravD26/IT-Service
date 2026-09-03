@@ -39,7 +39,7 @@ if (isset($_SESSION['flash_message'])) {
     unset($_SESSION['flash_message'], $_SESSION['flash_message_type']);
 }
 
-// Locations to choose from
+// Projects to choose from (stored in the long-standing `locations` master)
 $locations = [];
 $loc_result = $conn->query("SELECT name FROM locations ORDER BY name");
 while ($loc_row = $loc_result->fetch_assoc()) {
@@ -66,7 +66,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_supervisor'])) {
     $confirm_password = $_POST['confirm_password'] ?? '';
 
     if ($name === '' || $phone === '' || $location === '' || $password === '') {
-        $message = "Name, Mobile Number, Location and Password are required";
+        $message = "Name, Mobile Number, Project and Password are required";
+        $message_type = "danger";
+    } elseif (supervisor_project_count($conn, $location) >= SUPERVISORS_PER_PROJECT_MAX) {
+        $message = "Project \"{$location}\" already has " . SUPERVISORS_PER_PROJECT_MAX . " supervisors, which is the maximum. Reassign one of them first.";
         $message_type = "danger";
     } elseif (strlen($phone) !== 10) {
         $message = "Mobile Number must be exactly 10 digits";
@@ -112,7 +115,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_supervisor']))
     $password = $_POST['password'] ?? '';
 
     if ($name === '' || $phone === '' || $location === '') {
-        $message = "Name, Mobile Number and Location are required";
+        $message = "Name, Mobile Number and Project are required";
+        $message_type = "danger";
+    } elseif (supervisor_project_count($conn, $location, $sup_id) >= SUPERVISORS_PER_PROJECT_MAX) {
+        $message = "Project \"{$location}\" already has " . SUPERVISORS_PER_PROJECT_MAX . " supervisors, which is the maximum. Reassign one of them first.";
         $message_type = "danger";
     } elseif (strlen($phone) !== 10) {
         $message = "Mobile Number must be exactly 10 digits";
@@ -204,7 +210,8 @@ $supervisors = $conn->query("
         <div class="alert alert-info">
             <strong>What is a supervisor?</strong> A supervisor logs in with their own mobile number and password,
             and punches attendance on behalf of the employees who do not carry a phone.
-            They see <strong>only the employees at the location you assign here</strong>.
+            They see <strong>only the employees allocated to the project you assign here</strong> — never anybody
+            from another project. A project can have at most <?php echo SUPERVISORS_PER_PROJECT_MAX; ?> supervisors.
         </div>
 
         <!-- Add Supervisor Form -->
@@ -226,14 +233,14 @@ $supervisors = $conn->query("
                         <div class="form-text">This is the supervisor's login ID.</div>
                     </div>
                     <div class="col-md-4">
-                        <label class="form-label">Location <span class="text-danger">*</span></label>
+                        <label class="form-label">Project <span class="text-danger">*</span></label>
                         <select name="location" class="form-control" required>
-                            <option value="">Select Location</option>
+                            <option value="">Select Project</option>
                             <?php foreach ($locations as $loc): ?>
                                 <option value="<?php echo htmlspecialchars($loc); ?>"><?php echo htmlspecialchars($loc); ?></option>
                             <?php endforeach; ?>
                         </select>
-                        <div class="form-text">Supervisor will manage every employee at this location.</div>
+                        <div class="form-text">Supervisor will manage every employee allocated to this project.</div>
                     </div>
                     <div class="col-md-4">
                         <label class="form-label">Email <span class="text-muted small">(optional)</span></label>
@@ -282,7 +289,7 @@ $supervisors = $conn->query("
                         <div class="card sup-card shadow-sm h-100">
                             <div class="card-body">
                                 <h5 class="card-title mb-1"><?php echo htmlspecialchars($sup['name']); ?></h5>
-                                <span class="badge loc-badge mb-2">📍 <?php echo htmlspecialchars($sup['location']); ?></span>
+                                <span class="badge loc-badge mb-2">🗂️ Project: <?php echo htmlspecialchars($sup['location']); ?></span>
                                 <p class="card-text small mb-1"><strong>📱 Login:</strong> <?php echo htmlspecialchars($sup['phone']); ?></p>
                                 <?php if (!empty($sup['email'])): ?>
                                     <p class="card-text small mb-1"><strong>✉️</strong> <?php echo htmlspecialchars($sup['email']); ?></p>
@@ -328,7 +335,7 @@ $supervisors = $conn->query("
                                 oninput="this.value=this.value.replace(/[^0-9]/g,'').slice(0,10);">
                         </div>
                         <div class="col-md-6">
-                            <label class="form-label">Location <span class="text-danger">*</span></label>
+                            <label class="form-label">Project <span class="text-danger">*</span></label>
                             <select name="location" id="editLocation" class="form-control" required>
                                 <?php foreach ($locations as $loc): ?>
                                     <option value="<?php echo htmlspecialchars($loc); ?>"><?php echo htmlspecialchars($loc); ?></option>

@@ -22,14 +22,18 @@ $conn->query("CREATE TABLE IF NOT EXISTS leave_applications (
 if (isset($_GET['ajax']) && $_GET['ajax'] === 'leaves') {
     header('Content-Type: application/json');
     require_once __DIR__ . '/../config/pay_period.php';
+    require_once __DIR__ . '/../config/salary_summary.php';
 
     $uid   = (int)($_GET['user_id'] ?? 0);
     $month = $_GET['month'] ?? date('Y-m'); // "2026-08" = the 26 Aug .. 25 Sep pay period
 
     $result = pay_period_paid_days($conn, $uid, $month);
+    // A week off or holiday the employee actually worked earns an extra day
+    $extra = salary_extra_duty($conn, $uid, $result['start'], $result['end']);
 
     echo json_encode([
         'absent_days'    => $result['absent_days'],
+        'extra_duty_days' => $extra['days'],
         'paid_days'      => $result['paid_days'],
         'days_in_month'  => $result['days_in_period'],  // kept for the existing front-end
         'days_in_period' => $result['days_in_period'],
@@ -260,7 +264,7 @@ async function generateSlip(empId, emp) {
 
     // Pay runs 26th -> 25th, so the period length and label come from the
     // server (config/pay_period.php), never from the calendar month.
-    let absentDays = 0, deductionAmt = 0;
+    let absentDays = 0, deductionAmt = 0, extraDutyDays = 0, extraDutyAmt = 0;
     let daysInMonth = 30;
     let periodLabel = monthName;
     let periodEnd = null;
@@ -268,6 +272,7 @@ async function generateSlip(empId, emp) {
         const resp = await fetch(`salary_slip.php?ajax=leaves&user_id=${empId}&month=${monthVal}`);
         const data = await resp.json();
         absentDays  = data.absent_days || 0;
+        extraDutyDays = data.extra_duty_days || 0;
         daysInMonth = data.days_in_period || data.days_in_month || daysInMonth;
         periodLabel = data.period_label || periodLabel;
         periodEnd   = data.period_end || null;
@@ -296,6 +301,7 @@ async function generateSlip(empId, emp) {
     // net pay to ₹0 or negative for anyone with an absence.
     const perDaySalary = daysInMonth > 0 ? grossEarnings / daysInMonth : 0;
     deductionAmt = perDaySalary * absentDays;
+    extraDutyAmt = perDaySalary * extraDutyDays;
 
     let deductionRows = '';
     let totalDeductions = pf + esi + deductionAmt;
@@ -306,7 +312,7 @@ async function generateSlip(empId, emp) {
     }
     if (!deductionRows) deductionRows = '<tr><td colspan="2" class="text-muted text-center">No deductions</td></tr>';
 
-    const netPay = grossEarnings - totalDeductions;
+    const netPay = grossEarnings + extraDutyAmt - totalDeductions;
     const paidDays = daysInMonth - absentDays;
     const payDate = periodEnd
         ? new Date(periodEnd + 'T00:00:00').toLocaleString('en-IN',{day:'2-digit',month:'short',year:'numeric'})
@@ -342,7 +348,8 @@ async function generateSlip(empId, emp) {
               <thead><tr><th>Earnings</th><th class="text-end">Amount</th></tr></thead>
               <tbody>
                 ${earningsRows}
-                <tr class="total-row"><td>Gross Earnings</td><td class="text-end">₹ ${INR(grossEarnings)}</td></tr>
+                ${extraDutyDays > 0 ? `<tr><td>Extra Duty (${extraDutyDays} day${extraDutyDays>1?'s':''} worked on an off day)</td><td class="text-end">₹ ${INR(extraDutyAmt)}</td></tr>` : ''}
+                <tr class="total-row"><td>Gross Earnings</td><td class="text-end">₹ ${INR(grossEarnings + extraDutyAmt)}</td></tr>
               </tbody>
             </table>
           </div>

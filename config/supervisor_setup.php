@@ -3,8 +3,14 @@
  * Schema needed by the Supervisor feature.
  *
  * A supervisor is a `users` row with role='supervisor' and a `location`. They
- * punch attendance on behalf of the employees at that location - the staff who
- * do not carry a phone of their own.
+ * punch attendance on behalf of the employees allocated to that same value -
+ * the staff who do not carry a phone of their own.
+ *
+ * `location` is the PROJECT an employee is allocated to. The column keeps its
+ * original name so no data had to move, but everywhere a person can see it the
+ * word is "project". A project has many employees and at most two supervisors;
+ * an employee belongs to exactly one project. A supervisor therefore sees only
+ * the employees allocated to their own project - never the whole company.
  *
  * Safe to call on every request; each step is checked before it runs.
  */
@@ -31,9 +37,34 @@ function supervisor_ensure_schema(mysqli $conn): void
     }
 }
 
+/** Most supervisors a single project may have. */
+const SUPERVISORS_PER_PROJECT_MAX = 2;
+
 /**
- * The employees a supervisor is responsible for: everyone still working at
- * the supervisor's own location.
+ * How many supervisors are already assigned to a project, so the admin screen
+ * can stop a third being added.
+ *
+ * @param int $ignore_user_id supervisor being edited, excluded from the count
+ */
+function supervisor_project_count(mysqli $conn, string $project, int $ignore_user_id = 0): int
+{
+    $stmt = $conn->prepare(
+        "SELECT COUNT(*) AS c FROM users
+         WHERE role = 'supervisor' AND location = ? AND id <> ?"
+    );
+    $stmt->bind_param("si", $project, $ignore_user_id);
+    $stmt->execute();
+    $row = $stmt->get_result()->fetch_assoc();
+    $stmt->close();
+    return (int)($row['c'] ?? 0);
+}
+
+/**
+ * The employees a supervisor is responsible for: everyone still working who is
+ * allocated to the supervisor's own project.
+ *
+ * A supervisor with no project gets an empty list rather than every employee
+ * whose project is blank - an unassigned account must never see anybody.
  *
  * @return array<int,array> id, name, employee_id, department, shift_time, profile photo flag
  */
@@ -56,15 +87,22 @@ function supervisor_employees(mysqli $conn, string $location): array
 }
 
 /**
- * Confirms an employee really is at the supervisor's location before any
- * attendance is written for them.
+ * Confirms an employee really is allocated to the supervisor's project before
+ * any attendance is written for them.
+ *
+ * This must scope exactly like supervisor_employees() above, including the
+ * blank-project and status guards: anything it lets through can be punched for
+ * over the API even when it never appeared in the supervisor's list.
  */
 function supervisor_can_punch_for(mysqli $conn, string $location, int $employee_id): ?array
 {
+    if (trim($location) === '') {
+        return null;
+    }
     $stmt = $conn->prepare(
         "SELECT id, name, employee_id, status
          FROM users
-         WHERE id = ? AND role = 'employee' AND location = ?
+         WHERE id = ? AND role = 'employee' AND status = 'Working' AND location = ?
          LIMIT 1"
     );
     $stmt->bind_param("is", $employee_id, $location);

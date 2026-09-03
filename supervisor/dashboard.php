@@ -78,7 +78,7 @@ $employees = supervisor_employee_list($conn, $location);
     <div class="container d-flex justify-content-between align-items-center flex-wrap gap-2">
         <div>
             <h5 class="mb-0">🧑‍✈️ <?php echo htmlspecialchars($supervisor['name']); ?></h5>
-            <small>📍 <?php echo htmlspecialchars($location ?: 'No location assigned'); ?> &middot; <?php echo date('D, d M Y'); ?></small>
+            <small>🗂️ <?php echo htmlspecialchars($location ?: "No project assigned"); ?> &middot; <?php echo date('D, d M Y'); ?></small>
         </div>
         <a href="../auth/logout.php" class="btn btn-light btn-sm">Logout</a>
     </div>
@@ -88,11 +88,11 @@ $employees = supervisor_employee_list($conn, $location);
 
     <?php if ($location === ''): ?>
         <div class="alert alert-danger">
-            No location is assigned to your account. Please ask an admin to set your location before punching attendance.
+            No project is assigned to your account. Please ask an admin to allocate you to a project before punching attendance.
         </div>
     <?php elseif (empty($employees)): ?>
         <div class="alert alert-warning">
-            No working employees found at <strong><?php echo htmlspecialchars($location); ?></strong>.
+            No working employees are allocated to <strong><?php echo htmlspecialchars($location); ?></strong>.
         </div>
     <?php else: ?>
 
@@ -100,7 +100,7 @@ $employees = supervisor_employee_list($conn, $location);
     <div class="card shadow-sm">
         <div class="card-header bg-white">
             <h5 class="mb-0">🔍 Punch Attendance</h5>
-            <small class="text-muted">Search an employee at <?php echo htmlspecialchars($location); ?>, then tap their card to punch.</small>
+            <small class="text-muted">Search an employee allocated to <?php echo htmlspecialchars($location); ?>, then tap their card to punch.</small>
         </div>
         <div class="card-body">
 
@@ -116,7 +116,7 @@ $employees = supervisor_employee_list($conn, $location);
 
             <div id="emptyHint" class="text-center text-muted py-4">
                 <i class="fas fa-user-group fa-2x mb-2 d-block" style="opacity:.3;"></i>
-                <?php echo count($employees); ?> employee(s) at this location. Start typing to find one.
+                <?php echo count($employees); ?> employee(s) allocated to this project. Start typing to find one.
             </div>
         </div>
     </div>
@@ -174,7 +174,7 @@ $employees = supervisor_employee_list($conn, $location);
     const searchInput = document.getElementById('employeeSearch');
     const resultsBox  = document.getElementById('employeeResults');
 
-    // ── Search: name or employee ID, limited to this location's employees ──
+    // ── Search: name or employee ID, limited to this project's employees ──
     function renderResults(term) {
         const q = term.trim().toLowerCase();
         const matches = EMPLOYEES.filter(e =>

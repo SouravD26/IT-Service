@@ -40,7 +40,7 @@ function supervisor_today_status(mysqli $conn, string $location, int $employee_i
 {
     $employee = supervisor_can_punch_for($conn, $location, $employee_id);
     if (!$employee) {
-        return ['success' => false, 'message' => 'That employee is not at your location.'];
+        return ['success' => false, 'message' => 'That employee is not allocated to your project.'];
     }
 
     $date = attendance_shift_date();
@@ -108,7 +108,7 @@ function supervisor_do_punch(
 
     $employee = supervisor_can_punch_for($conn, $location, $employee_id);
     if (!$employee) {
-        return ['success' => false, 'message' => 'That employee is not at your location.'];
+        return ['success' => false, 'message' => 'That employee is not allocated to your project.'];
     }
     if ($employee['status'] === 'Resign') {
         return ['success' => false, 'message' => $employee['name'] . ' is marked as Resign and cannot be punched ' . $action . '.'];

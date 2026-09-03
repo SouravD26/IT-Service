@@ -16,6 +16,9 @@ use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use PhpOffice\PhpSpreadsheet\Style\Border;
 use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
 
+// Bank + salary columns shared by every attendance export
+require_once __DIR__ . '/../config/export_salary_columns.php';
+
 // Authentication check
 if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION['role'] !== 'suparadmin')) {
     header("Location: ../auth/login.php");
@@ -68,8 +71,9 @@ $selected_companies = isset($_POST['companies']) && is_array($_POST['companies']
 
 // Build SQL query to fetch employees, optionally filtering by company
 $query = "
-    SELECT id, employee_id, name, department, location, week_off, shift_time, status, date_of_exit 
-    FROM users 
+    SELECT id, employee_id, name, department, location, week_off, shift_time, status, date_of_exit,
+           bank_name, bank_ifsc_code, bank_account_number
+    FROM users
     WHERE role = 'employee' AND (status = 'Working' OR status = 'Resign')
 ";
 
@@ -198,14 +202,18 @@ if (!empty($all_employee_ids)) {
 
 // Helper function to check status for a date (using cached data)
 // Status codes follow the company attendance policy (config/attendance_policy.php):
-//   P = full day, HD = half day, A = absent, WO = week off, OD = on duty, ADJ = comp off adjusted
+//   P = full day, HD = half day, A = absent, WO = week off, H = project holiday, OD = on duty, ADJ = comp off adjusted
 // The punch times are already cached, so the policy is applied without extra queries.
-function getStatusForDate($user_id, $date_str, $week_off, $attendance_cache, $od_cache, $comp_off_cache, $conn = null, $shift_time = null) {
+function getStatusForDate($user_id, $date_str, $week_off, $attendance_cache, $od_cache, $comp_off_cache, $conn = null, $shift_time = null, $holiday_dates = []) {
     require_once __DIR__ . '/../config/attendance_policy.php';
 
     $day_name = date('l', strtotime($date_str));
     if ($week_off === $day_name) {
         return 'WO';
+    }
+    // A day the superadmin declared off for this whole project
+    if (isset($holiday_dates[$date_str])) {
+        return 'H';
     }
 
     $key = $user_id . '_' . $date_str;
@@ -225,6 +233,47 @@ function getStatusForDate($user_id, $date_str, $week_off, $attendance_cache, $od
     }
 
     return $has_comp_off ? 'ADJ' : 'A';
+}
+
+/**
+ * Applies the sandwich rule to a row of status codes, keyed by date in order.
+ *
+ * This export builds its statuses from a prefetched cache one date at a time,
+ * so it cannot see the neighbouring days the way attendance_day_results() does.
+ * Re-checking the finished row keeps this sheet agreeing with the attendance
+ * screens and the payslip: a WO flanked by A on both sides becomes A.
+ *
+ * A week off on the first or last day of the export range keeps its WO, since
+ * the day outside the range was never fetched.
+ */
+function applySandwichToStatusRow(array $statuses, $conn) {
+    require_once __DIR__ . '/../config/attendance_policy.php';
+    $policy = attendance_policy($conn);
+    if (!$policy['sandwich_absent']) {
+        return $statuses;
+    }
+
+    $dates = array_keys($statuses);
+    $n = count($dates);
+
+    for ($i = 0; $i < $n; $i++) {
+        if ($statuses[$dates[$i]] !== 'WO') {
+            continue;
+        }
+        $j = $i;
+        while ($j + 1 < $n && $statuses[$dates[$j + 1]] === 'WO') {
+            $j++;
+        }
+        if ($i - 1 >= 0 && $j + 1 < $n
+            && $statuses[$dates[$i - 1]] === 'A'
+            && $statuses[$dates[$j + 1]] === 'A') {
+            for ($k = $i; $k <= $j; $k++) {
+                $statuses[$dates[$k]] = 'A';
+            }
+        }
+        $i = $j;
+    }
+    return $statuses;
 }
 
 function extractTimeFromTimestamp($timestamp) {
@@ -303,7 +352,13 @@ $centerAlignment = new Alignment(['horizontal' => 'center', 'vertical' => 'cente
 function createLocationSheet($spreadsheet, $location, $employees_by_dept, $date_range, $days_in_month, $month_name, $titleFont, $titleAlignment, $centerAlignment, $conn, $attendance_cache, $od_cache, $comp_off_cache) {
     $sheet = $spreadsheet->createSheet();
     $sheet->setTitle(substr($location, 0, 31)); // Excel sheet name max 31 chars
-    
+
+    // One sheet is one project, so its declared holidays are fetched once here
+    require_once __DIR__ . '/../config/project_holiday.php';
+    $holiday_dates = $date_range
+        ? project_holidays_between($conn, (string)$location, reset($date_range), end($date_range))
+        : [];
+
     // Get date range objects for comparison
     $from_date_obj = new DateTime($date_range[0]);
     $to_date_obj = new DateTime($date_range[count($date_range) - 1]);
@@ -332,7 +387,9 @@ function createLocationSheet($spreadsheet, $location, $employees_by_dept, $date_
         $sheet->getStyle($col . $row)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
         $sheet->getStyle($col . $row)->getAlignment()->setVertical(Alignment::VERTICAL_CENTER);
     }
+    export_salary_write_headers($sheet, $row, $days_in_month);
     $sheet->getRowDimension($row)->setRowHeight(20);
+    $salary_month = export_salary_month($date_range);
     $row++;
     
     // Process each department in this location
@@ -362,22 +419,30 @@ function createLocationSheet($spreadsheet, $location, $employees_by_dept, $date_
             
             $emp_start_row = $row;
             
-            // Employee name row
+            // Employee name row, with their bank details and salary on the right
             $sheet->setCellValue('A' . $row, $emp['employee_id'] . " - " . $emp['name']);
             $sheet->getStyle('A' . $row)->applyFromArray(['font' => ['bold' => true, 'size' => 11]]);
+            export_salary_write_row($sheet, $row, $days_in_month, $conn, $emp, $salary_month);
             $row++;
             
             // Status row
             $sheet->setCellValue('A' . $row, "Status");
             $sheet->getStyle('A' . $row)->applyFromArray(['font' => ['bold' => true]]);
             
-            foreach ($date_range as $day_index => $date_str) {
+            // Build the whole row first, so the sandwich rule can see each day's neighbours
+            $emp_statuses = [];
+            foreach ($date_range as $date_str) {
                 // Check if this date is after resignation month
                 if ($emp_resigned && new DateTime($date_str) > $resign_month_end) {
-                    $status = '-';
+                    $emp_statuses[$date_str] = '-';
                 } else {
-                    $status = getStatusForDate($emp['id'], $date_str, $emp['week_off'], $attendance_cache, $od_cache, $comp_off_cache, $conn, $emp['shift_time'] ?? null);
+                    $emp_statuses[$date_str] = getStatusForDate($emp['id'], $date_str, $emp['week_off'], $attendance_cache, $od_cache, $comp_off_cache, $conn, $emp['shift_time'] ?? null, $holiday_dates);
                 }
+            }
+            $emp_statuses = applySandwichToStatusRow($emp_statuses, $conn);
+
+            foreach ($date_range as $day_index => $date_str) {
+                $status = $emp_statuses[$date_str];
                 $col = Coordinate::stringFromColumnIndex($day_index + 2);
                 $sheet->setCellValue($col . $row, $status);
                 $sheet->getStyle($col . $row)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);

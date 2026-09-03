@@ -12,6 +12,7 @@ header('Content-Type: application/json');
 require_once '../config/db.php';
 require_once '../config/api_auth.php';
 require_once '../config/pay_period.php';
+require_once '../config/salary_summary.php';
 
 $authUser = api_authenticate_flexible($conn);
 
@@ -90,12 +91,21 @@ $perDaySalary = $daysInMonth > 0 ? $grossEarnings / $daysInMonth : 0;
 $leaveDeduction = $perDaySalary * $absentDays;
 $totalDeductions = $pf + $esi + $leaveDeduction;
 
+// Extra duty: a week off or project holiday the employee actually worked earns
+// one more day at the same rate (half a day for a half day).
+$extraDuty       = salary_extra_duty($conn, $user_id, $start, $end);
+$extraDutyDays   = $extraDuty['days'];
+$extraDutyAmount = $perDaySalary * $extraDutyDays;
+if ($extraDutyDays > 0) {
+    $earnings[] = ['name' => "Extra Duty ($extraDutyDays day" . ($extraDutyDays > 1 ? 's' : '') . ' worked on an off day)', 'amount' => $extraDutyAmount];
+}
+
 $deductions = [];
 if ($pf > 0) $deductions[] = ['name' => 'Provident Fund (' . $emp['pf_calc'] . ')', 'amount' => $pf];
 if ($esi > 0) $deductions[] = ['name' => 'ESI (' . $emp['esi_calc'] . ')', 'amount' => $esi];
 if ($absentDays > 0) $deductions[] = ['name' => "Leave Deduction ($absentDays day" . ($absentDays > 1 ? 's' : '') . ' absent)', 'amount' => $leaveDeduction];
 
-$netPay = $grossEarnings - $totalDeductions;
+$netPay = $grossEarnings + $extraDutyAmount - $totalDeductions;
 
 echo json_encode([
     'success' => true,
@@ -115,8 +125,10 @@ echo json_encode([
     'paid_days' => $paidDays,
     'absent_days' => $absentDays,
     'half_days' => $halfDays,
+    'extra_duty_days' => $extraDutyDays,
+    'extra_duty_amount' => round($extraDutyAmount, 2),
     'earnings' => $earnings,
-    'gross_earnings' => round($grossEarnings, 2),
+    'gross_earnings' => round($grossEarnings + $extraDutyAmount, 2),
     'deductions' => $deductions,
     'total_deductions' => round($totalDeductions, 2),
     'net_pay' => round($netPay, 2)

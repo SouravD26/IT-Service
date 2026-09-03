@@ -65,6 +65,7 @@ $columns_to_add = [
     'address' => 'TEXT',
     'bank_account_number' => 'VARCHAR(30)',
     'bank_ifsc_code' => 'VARCHAR(15)',
+    'bank_name' => 'VARCHAR(100)',
     'profile_photo' => 'LONGBLOB',
     'profile_photo_type' => 'VARCHAR(50)'
 ];
@@ -274,6 +275,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_employee'])) {
     $address = htmlspecialchars(trim($_POST['address'] ?? ''));
     $bank_account_number = htmlspecialchars(trim($_POST['bank_account_number'] ?? ''));
     $bank_ifsc_code = strtoupper(htmlspecialchars(trim($_POST['bank_ifsc_code'] ?? '')));
+    $bank_name = htmlspecialchars(trim($_POST['bank_name'] ?? ''));
 
     // Validation
     if (empty($name) || empty($department) || empty($employee_id) ||
@@ -306,8 +308,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_employee'])) {
             // Create employee WITHOUT password - Super Admin will set it later
             // Use a placeholder password that cannot login (starts with !)
             $placeholder_password = password_hash('!' . uniqid(), PASSWORD_BCRYPT);
-            $stmt_insert = $conn->prepare("INSERT INTO users (name, email, password, role, department, employee_id, company, phone, shift_time, location, date_of_joining, date_of_exit, status, sex, week_off, aadhar_number, pan_number, family_member_name, alternate_number, address, bank_account_number, bank_ifsc_code, password_set) VALUES (?, ?, ?, 'employee', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, FALSE)");
-            $stmt_insert->bind_param("sssssssssssssssssssss", $name, $email, $placeholder_password, $department, $employee_id, $company, $phone, $shift_time, $location, $date_of_joining, $date_of_exit, $status, $sex, $week_off, $aadhar_number, $pan_number, $family_member_name, $alternate_number, $address, $bank_account_number, $bank_ifsc_code);
+            $stmt_insert = $conn->prepare("INSERT INTO users (name, email, password, role, department, employee_id, company, phone, shift_time, location, date_of_joining, date_of_exit, status, sex, week_off, aadhar_number, pan_number, family_member_name, alternate_number, address, bank_account_number, bank_ifsc_code, bank_name, password_set) VALUES (?, ?, ?, 'employee', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, FALSE)");
+            $stmt_insert->bind_param("ssssssssssssssssssssss", $name, $email, $placeholder_password, $department, $employee_id, $company, $phone, $shift_time, $location, $date_of_joining, $date_of_exit, $status, $sex, $week_off, $aadhar_number, $pan_number, $family_member_name, $alternate_number, $address, $bank_account_number, $bank_ifsc_code, $bank_name);
 
             if ($stmt_insert->execute()) {
                 $new_user_id = $conn->insert_id;
@@ -371,6 +373,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_employee'])) {
     $address = htmlspecialchars(trim($_POST['address'] ?? ''));
     $bank_account_number = htmlspecialchars(trim($_POST['bank_account_number'] ?? ''));
     $bank_ifsc_code = strtoupper(htmlspecialchars(trim($_POST['bank_ifsc_code'] ?? '')));
+    $bank_name = htmlspecialchars(trim($_POST['bank_name'] ?? ''));
 
     // Validation
     if (empty($name) || empty($department) || empty($employee_id) || empty($company) ||
@@ -400,8 +403,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_employee'])) {
     }
 
     if ($message_type !== "danger") {
-        $stmt_update = $conn->prepare("UPDATE users SET name=?, email=?, department=?, employee_id=?, company=?, phone=?, shift_time=?, location=?, date_of_joining=?, date_of_exit=?, status=?, sex=?, week_off=?, aadhar_number=?, pan_number=?, family_member_name=?, alternate_number=?, address=?, bank_account_number=?, bank_ifsc_code=? WHERE id=?");
-        $stmt_update->bind_param("ssssssssssssssssssssi", $name, $email, $department, $employee_id, $company, $phone, $shift_time, $location, $date_of_joining, $date_of_exit, $status, $sex, $week_off, $aadhar_number, $pan_number, $family_member_name, $alternate_number, $address, $bank_account_number, $bank_ifsc_code, $emp_id);
+        $stmt_update = $conn->prepare("UPDATE users SET name=?, email=?, department=?, employee_id=?, company=?, phone=?, shift_time=?, location=?, date_of_joining=?, date_of_exit=?, status=?, sex=?, week_off=?, aadhar_number=?, pan_number=?, family_member_name=?, alternate_number=?, address=?, bank_account_number=?, bank_ifsc_code=?, bank_name=? WHERE id=?");
+        $stmt_update->bind_param("sssssssssssssssssssssi", $name, $email, $department, $employee_id, $company, $phone, $shift_time, $location, $date_of_joining, $date_of_exit, $status, $sex, $week_off, $aadhar_number, $pan_number, $family_member_name, $alternate_number, $address, $bank_account_number, $bank_ifsc_code, $bank_name, $emp_id);
 
         if ($stmt_update->execute()) {
             save_profile_photo($conn, $emp_id);
@@ -482,7 +485,7 @@ if (isset($_GET['fetch_employee'])) {
         SELECT u.id, u.name, u.email, u.employee_id, u.company, u.phone, u.department,
                u.shift_time, u.location, u.date_of_joining, u.date_of_exit, u.status, u.sex, u.week_off,
                u.aadhar_number, u.pan_number, u.family_member_name, u.alternate_number, u.address,
-               u.bank_account_number, u.bank_ifsc_code,
+               u.bank_account_number, u.bank_ifsc_code, u.bank_name,
                COALESCE(s.salary_ctc, 0)                AS salary_ctc,
                COALESCE(s.basic_monthly, 0)             AS basic_monthly,
                COALESCE(s.special_allowance_monthly, 0) AS special_allowance_monthly,
@@ -811,6 +814,11 @@ $employee_limit_reached = $current_employee_count >= MAX_EMPLOYEES_LIMIT;
                             <div class="card-body">
                                 <div class="row g-3">
                                     <div class="col-md-4">
+                                        <label class="form-label">Bank Name <span class="text-muted small">(optional)</span></label>
+                                        <input type="text" name="bank_name" class="form-control" placeholder="e.g., State Bank of India"
+                                            maxlength="100">
+                                    </div>
+                                    <div class="col-md-4">
                                         <label class="form-label">Bank Account Number <span class="text-muted small">(optional)</span></label>
                                         <input type="text" name="bank_account_number" class="form-control" placeholder="Enter bank account number"
                                             maxlength="30" pattern="[0-9]{6,30}"
@@ -1097,7 +1105,7 @@ $employee_limit_reached = $current_employee_count >= MAX_EMPLOYEES_LIMIT;
         <?php
         if (isset($_GET['view_employee'])) {
             $view_id = (int)$_GET['view_employee'];
-            $stmt_view = $conn->prepare("SELECT id, name, email, employee_id, company, phone, department, shift_time, location, date_of_joining, date_of_exit, status, sex, week_off, aadhar_number, pan_number, family_member_name, alternate_number, address, bank_account_number, bank_ifsc_code FROM users WHERE id = ? AND role = 'employee'");
+            $stmt_view = $conn->prepare("SELECT id, name, email, employee_id, company, phone, department, shift_time, location, date_of_joining, date_of_exit, status, sex, week_off, aadhar_number, pan_number, family_member_name, alternate_number, address, bank_account_number, bank_ifsc_code, bank_name FROM users WHERE id = ? AND role = 'employee'");
             $stmt_view->bind_param("i", $view_id);
             $stmt_view->execute();
             $result_view = $stmt_view->get_result();
@@ -1175,8 +1183,9 @@ $employee_limit_reached = $current_employee_count >= MAX_EMPLOYEES_LIMIT;
                                 <div class="col-md-4"><strong>PAN Number:</strong> <?php echo htmlspecialchars($emp['pan_number'] ?? '') ?: 'N/A'; ?></div>
                                 <div class="col-md-4"><strong>Family Member Name:</strong> <?php echo htmlspecialchars($emp['family_member_name'] ?? '') ?: 'N/A'; ?></div>
                                 <div class="col-md-4"><strong>Family Contact Number:</strong> <?php echo htmlspecialchars($emp['alternate_number'] ?? '') ?: 'N/A'; ?></div>
-                                <div class="col-md-6"><strong>Bank Account Number:</strong> <?php echo htmlspecialchars($emp['bank_account_number'] ?? '') ?: 'N/A'; ?></div>
-                                <div class="col-md-6"><strong>IFSC Code:</strong> <?php echo htmlspecialchars($emp['bank_ifsc_code'] ?? '') ?: 'N/A'; ?></div>
+                                <div class="col-md-4"><strong>Bank Name:</strong> <?php echo htmlspecialchars($emp['bank_name'] ?? '') ?: 'N/A'; ?></div>
+                                <div class="col-md-4"><strong>Bank Account Number:</strong> <?php echo htmlspecialchars($emp['bank_account_number'] ?? '') ?: 'N/A'; ?></div>
+                                <div class="col-md-4"><strong>IFSC Code:</strong> <?php echo htmlspecialchars($emp['bank_ifsc_code'] ?? '') ?: 'N/A'; ?></div>
                                 <div class="col-md-12 mt-2"><strong>Address:</strong> <?php echo htmlspecialchars($emp['address'] ?? '') ?: 'N/A'; ?></div>
                             </div>
                             <a href="?view_employee=<?php echo $emp['id']; ?>" class="btn btn-info">View Details</a>
@@ -1602,6 +1611,7 @@ $employee_limit_reached = $current_employee_count >= MAX_EMPLOYEES_LIMIT;
                 document.getElementById('viewPan').textContent       = e.pan_number || '-';
                 document.getElementById('viewFamilyName').textContent = e.family_member_name || '-';
                 document.getElementById('viewAltPhone').textContent  = e.alternate_number || '-';
+                document.getElementById('viewBankName').textContent  = e.bank_name || '-';
                 document.getElementById('viewBankAccount').textContent = e.bank_account_number || '-';
                 document.getElementById('viewIfsc').textContent      = e.bank_ifsc_code || '-';
                 document.getElementById('viewAddress').textContent   = e.address || '-';
@@ -2235,6 +2245,7 @@ $employee_limit_reached = $current_employee_count >= MAX_EMPLOYEES_LIMIT;
             });
             refreshSubmitState(document.getElementById('editEmployeeForm'));
             document.getElementById('modalIfsc').value = empData.bank_ifsc_code || '';
+            document.getElementById('modalBankName').value = empData.bank_name || '';
 
             // Reset file input and show existing photo (if any) as the preview
             document.getElementById('editProfilePhotoInput').value = '';
@@ -2392,8 +2403,9 @@ $employee_limit_reached = $current_employee_count >= MAX_EMPLOYEES_LIMIT;
                         <div class="col-md-4"><strong>PAN Number:</strong> <span id="viewPan">-</span></div>
                         <div class="col-md-4"><strong>Family Member Name:</strong> <span id="viewFamilyName">-</span></div>
                         <div class="col-md-4"><strong>Family Contact Number:</strong> <span id="viewAltPhone">-</span></div>
-                        <div class="col-md-6"><strong>Bank Account Number:</strong> <span id="viewBankAccount">-</span></div>
-                        <div class="col-md-6"><strong>IFSC Code:</strong> <span id="viewIfsc">-</span></div>
+                        <div class="col-md-4"><strong>Bank Name:</strong> <span id="viewBankName">-</span></div>
+                        <div class="col-md-4"><strong>Bank Account Number:</strong> <span id="viewBankAccount">-</span></div>
+                        <div class="col-md-4"><strong>IFSC Code:</strong> <span id="viewIfsc">-</span></div>
                         <div class="col-md-12"><strong>Address:</strong> <span id="viewAddress">-</span></div>
                     </div>
                     <hr class="my-3">

@@ -11,6 +11,9 @@ use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use PhpOffice\PhpSpreadsheet\Style\Border;
 use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
 
+// Bank + salary columns shared by every attendance export
+require_once __DIR__ . '/../config/export_salary_columns.php';
+
 // Authentication check
 if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION['role'] !== 'suparadmin')) {
     header("Location: ../auth/login.php");
@@ -48,7 +51,7 @@ if (!empty($from_date) && !empty($to_date)) {
 $days_in_month = cal_days_in_month(CAL_GREGORIAN, $month ?? date('m'), $year ?? date('Y'));
 
 // Build query to fetch employees including resigned ones
-$query = "SELECT id, employee_id, name, department, week_off, status, date_of_exit FROM users WHERE role = 'employee' AND (status = 'Working' OR status = 'Resign') AND location = ?";
+$query = "SELECT id, employee_id, name, department, week_off, status, date_of_exit, bank_name, bank_ifsc_code, bank_account_number FROM users WHERE role = 'employee' AND (status = 'Working' OR status = 'Resign') AND location = ?";
 $params = [$location];
 $types = "s";
 
@@ -82,7 +85,7 @@ $to_date_obj = new DateTime($to_date);
 
 // Helper function to check status for a date (date string version)
 // Status codes follow the company attendance policy (config/attendance_policy.php):
-//   P = full day, HD = half day, A = absent, WO = week off, OD = on duty, ADJ = comp off adjusted
+//   P = full day, HD = half day, A = absent, WO = week off, H = project holiday, OD = on duty, ADJ = comp off adjusted
 function getStatusForDateByString($conn, $user_id, $date_str, $week_off) {
     require_once __DIR__ . '/../config/attendance_policy.php';
 
@@ -90,6 +93,8 @@ function getStatusForDateByString($conn, $user_id, $date_str, $week_off) {
 
     switch ($result['status']) {
         case 'Week Off': return 'WO';
+
+        case 'Holiday':  return 'H';
         case 'OD':       return 'OD';
         case 'Comp Off': return 'ADJ';
         case 'Leave':    return 'L';
@@ -254,7 +259,9 @@ for ($day_idx = 0; $day_idx < $num_dates; $day_idx++) {
     $sheet->getStyle($col . $row)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
     $sheet->getStyle($col . $row)->getAlignment()->setVertical(Alignment::VERTICAL_CENTER);
 }
+export_salary_write_headers($sheet, $row, $num_dates);
 $sheet->getRowDimension($row)->setRowHeight(20);
+$salary_month = export_salary_month($date_range);
 $row++;
 
 // Process each department
@@ -286,11 +293,12 @@ foreach ($employees_by_dept as $dept => $employees) {
             }
         }
         
-        // Employee name row
+        // Employee name row, with their bank details and salary on the right
         $sheet->setCellValue('A' . $row, $emp['employee_id'] . " - " . $emp['name']);
         $sheet->getStyle('A' . $row)->applyFromArray([
             'font' => ['bold' => true, 'size' => 11]
         ]);
+        export_salary_write_row($sheet, $row, $num_dates, $conn, $emp, $salary_month);
         $row++;
 
         // Status row

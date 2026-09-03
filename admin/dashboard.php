@@ -150,6 +150,19 @@ $dm_greeting = $dm_hour < 12 ? 'Good morning' : ($dm_hour < 17 ? 'Good afternoon
             </div>
         </div>
 
+        <!-- Project Holidays Card -->
+        <div class="col-md-6 col-lg-4">
+            <div class="card dashboard-card shadow" style="border-left-color: #0dcaf0;">
+                <div class="card-body">
+                    <h5 class="card-title">🎌 Project Holidays</h5>
+                    <p class="card-text text-muted">Mark a day off for a whole project. Everyone on it is paid without punching.</p>
+                    <div class="card-links">
+                        <a href="project_holidays.php" class="btn btn-info btn-sm">Manage Holidays</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Manage Employee Passwords Card -->
         <div class="col-md-6 col-lg-4">
             <div class="card dashboard-card shadow" style="border-left-color: #dc3545;">

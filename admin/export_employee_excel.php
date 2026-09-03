@@ -11,6 +11,9 @@ use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use PhpOffice\PhpSpreadsheet\Style\Border;
 use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
 
+// Bank + salary columns shared by every attendance export
+require_once __DIR__ . '/../config/export_salary_columns.php';
+
 // Authentication check
 if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION['role'] !== 'suparadmin')) {
     header("Location: ../auth/login.php");
@@ -45,7 +48,7 @@ if (!empty($from_date) && !empty($to_date)) {
 }
 
 // Fetch employee details including date_of_exit for resignation check
-$stmt = $conn->prepare("SELECT id, employee_id, name, department, week_off, status, date_of_exit FROM users WHERE id = ? AND role = 'employee' AND (status = 'Working' OR status = 'Resign')");
+$stmt = $conn->prepare("SELECT id, employee_id, name, department, week_off, status, date_of_exit, bank_name, bank_ifsc_code, bank_account_number FROM users WHERE id = ? AND role = 'employee' AND (status = 'Working' OR status = 'Resign')");
 $stmt->bind_param("i", $employee_id);
 $stmt->execute();
 $result = $stmt->get_result();
@@ -83,7 +86,7 @@ if ($employee_resigned && $from_date_obj > $resign_month_end) {
 
 // Helper function to check status for a specific date (new version using date string).
 // Codes follow the company attendance policy (config/attendance_policy.php):
-//   P = full day, HD = half day, A = absent, WO = week off, OD = on duty, ADJ = comp off adjusted
+//   P = full day, HD = half day, A = absent, WO = week off, H = project holiday, OD = on duty, ADJ = comp off adjusted
 function getStatusForDateByString($conn, $user_id, $date_str, $week_off) {
     require_once __DIR__ . '/../config/attendance_policy.php';
 
@@ -91,6 +94,8 @@ function getStatusForDateByString($conn, $user_id, $date_str, $week_off) {
 
     switch ($result['status']) {
         case 'Week Off': return 'WO';
+
+        case 'Holiday':  return 'H';
         case 'OD':       return 'OD';
         case 'Comp Off': return 'ADJ';
         case 'Leave':    return 'L';
@@ -297,12 +302,14 @@ for ($day_idx = 0; $day_idx < $num_dates; $day_idx++) {
     $sheet->getStyle($col . $row)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
     $sheet->getStyle($col . $row)->getAlignment()->setVertical(Alignment::VERTICAL_CENTER);
 }
+export_salary_write_headers($sheet, $row, $num_dates);
 $sheet->getRowDimension($row)->setRowHeight(20);
 $row++;
 
-// Status row
+// Status row, carrying this employee's bank details and salary on the right
 $sheet->setCellValue('A' . $row, "Status");
 $sheet->getStyle('A' . $row)->applyFromArray(['font' => ['bold' => true]]);
+export_salary_write_row($sheet, $row, $num_dates, $conn, $employee, export_salary_month($date_range));
 
 for ($day_idx = 0; $day_idx < $num_dates; $day_idx++) {
     $date_str = $date_range[$day_idx];

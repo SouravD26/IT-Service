@@ -6,6 +6,10 @@
  *   1. A day with only a punch in and no punch out counts as ABSENT.
  *   2. A day needs at least 5 worked hours to earn HALF DAY pay; a full day
  *      needs the employee's full shift length.
+ *   3. Sandwich rule: a week off loses its pay when the employee is absent on
+ *      the working day before it AND the working day after it. For the usual
+ *      Sunday week off that is absent Saturday + absent Monday, which makes the
+ *      Sunday absent too instead of a paid holiday.
  *
  * Both numbers are editable at admin/attendance_policy.php - nothing here is
  * hard-coded. Every screen, export, API and the payslip calculation goes
@@ -22,10 +26,17 @@ function attendance_ensure_policy_table(mysqli $conn): void
             half_day_min_hours DECIMAL(4,2) NOT NULL DEFAULT 5.00,
             full_day_basis ENUM('shift','fixed') NOT NULL DEFAULT 'shift',
             full_day_fixed_hours DECIMAL(4,2) NOT NULL DEFAULT 8.00,
+            sandwich_absent TINYINT(1) NOT NULL DEFAULT 1,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
         ) ENGINE=InnoDB"
     );
     $conn->query("INSERT IGNORE INTO attendance_policy (id) VALUES (1)");
+
+    // Added after the table shipped - bring older installs up to date
+    $col = $conn->query("SHOW COLUMNS FROM attendance_policy LIKE 'sandwich_absent'");
+    if ($col && $col->num_rows === 0) {
+        $conn->query("ALTER TABLE attendance_policy ADD COLUMN sandwich_absent TINYINT(1) NOT NULL DEFAULT 1 AFTER full_day_fixed_hours");
+    }
 }
 
 /** The current policy, read once per request. */
@@ -43,6 +54,7 @@ function attendance_policy(mysqli $conn): array
         'half_day_min_hours'   => (float)($row['half_day_min_hours'] ?? 5),
         'full_day_basis'       => $row['full_day_basis'] ?? 'shift',
         'full_day_fixed_hours' => (float)($row['full_day_fixed_hours'] ?? 8),
+        'sandwich_absent'      => (bool)($row['sandwich_absent'] ?? 1),
     ];
     return $policy;
 }
@@ -148,13 +160,16 @@ function attendance_evaluate_day(array $sessions, array $policy, float $fullDayH
  * regardless of punches, exactly as the payroll always treated them. Everything
  * else is decided by the policy above.
  *
+ * The sandwich rule is applied afterwards by attendance_day_results(), which is
+ * what callers should use - this pass decides each day on its own.
+ *
  * @return array<string,array{status:string,credit:float,hours:float,note:string}> keyed by Y-m-d
  */
-function attendance_day_results(mysqli $conn, int $user_id, string $start, string $end): array
+function attendance_base_day_results(mysqli $conn, int $user_id, string $start, string $end): array
 {
     $policy = attendance_policy($conn);
 
-    $ust = $conn->prepare("SELECT week_off, shift_time FROM users WHERE id = ?");
+    $ust = $conn->prepare("SELECT week_off, shift_time, location FROM users WHERE id = ?");
     $ust->bind_param("i", $user_id);
     $ust->execute();
     $user = $ust->get_result()->fetch_assoc() ?: [];
@@ -162,6 +177,10 @@ function attendance_day_results(mysqli $conn, int $user_id, string $start, strin
 
     $weekOff      = $user['week_off'] ?? '';
     $fullDayHours = attendance_full_day_hours($policy, $user['shift_time'] ?? null);
+
+    // Days the superadmin declared off for this employee's whole project
+    require_once __DIR__ . '/project_holiday.php';
+    $holidays = project_holidays_between($conn, (string)($user['location'] ?? ''), $start, $end);
 
     // All punch sessions in range, grouped by date
     $byDate = [];
@@ -214,13 +233,132 @@ function attendance_day_results(mysqli $conn, int $user_id, string $start, strin
             $results[$date] = ['status' => 'OD', 'credit' => 1.0, 'hours' => 0.0, 'note' => 'On duty'];
         } elseif (isset($adjDates[$date])) {
             $results[$date] = ['status' => 'Comp Off', 'credit' => 1.0, 'hours' => 0.0, 'note' => 'Comp off adjusted'];
-        } elseif (date('l', $ts) === $weekOff) {
-            $results[$date] = ['status' => 'Week Off', 'credit' => 1.0, 'hours' => 0.0, 'note' => 'Weekly off'];
+        } elseif (date('l', $ts) === $weekOff || isset($holidays[$date])) {
+            // A day off. It is paid whether or not they came in, but record what
+            // they actually worked: the sandwich rule must not void a day the
+            // employee turned up for, and payroll pays it again as extra duty.
+            $worked = $sessions ? attendance_evaluate_day($sessions, $policy, $fullDayHours) : null;
+            $workedCredit = $worked ? $worked['credit'] : 0.0;
+
+            // Their own week off wins the label - it is already a paid day, and
+            // it is the more accurate thing to show this particular employee.
+            $isWeekOff = date('l', $ts) === $weekOff;
+            $note = $isWeekOff ? 'Weekly off' : $holidays[$date];
+            if ($workedCredit > 0) {
+                $note .= " - worked {$worked['hours']}h (extra duty)";
+            }
+
+            $results[$date] = [
+                'status'        => $isWeekOff ? 'Week Off' : 'Holiday',
+                'credit'        => 1.0,
+                'hours'         => $worked ? $worked['hours'] : 0.0,
+                'note'          => $note,
+                'worked_credit' => $workedCredit,
+            ];
         } else {
             $results[$date] = attendance_evaluate_day($sessions, $policy, $fullDayHours);
         }
     }
 
+    return $results;
+}
+
+/**
+ * Applies the sandwich rule in place, over a run of days in date order.
+ *
+ * A week off is only paid if the employee actually worked around it. When the
+ * working day immediately before a week off AND the one immediately after it
+ * are both Absent, the week off is treated as Absent too - the employee took
+ * the holiday as part of an unapproved break rather than earning it.
+ *
+ * Consecutive week offs (a Saturday + Sunday pair, say) are handled as one
+ * block: the whole block turns absent only if the days flanking the block are.
+ * Approved leave, OD and comp off never trigger it - only a real Absent does.
+ *
+ * @param array<string,array> $results keyed by Y-m-d, must cover a padded range
+ *                                     so the days flanking each block are present
+ */
+function attendance_apply_sandwich_rule(array &$results): void
+{
+    $dates = array_keys($results);
+    sort($dates);
+    $n = count($dates);
+
+    for ($i = 0; $i < $n; $i++) {
+        if ($results[$dates[$i]]['status'] !== 'Week Off') {
+            continue;
+        }
+        // Extend to the end of this block of consecutive week offs
+        $j = $i;
+        while ($j + 1 < $n && $results[$dates[$j + 1]]['status'] === 'Week Off') {
+            $j++;
+        }
+
+        // A day off the employee actually worked is earned, not taken as part
+        // of a break, so the whole block keeps its pay.
+        $worked = false;
+        for ($k = $i; $k <= $j; $k++) {
+            if (($results[$dates[$k]]['worked_credit'] ?? 0) > 0) {
+                $worked = true;
+                break;
+            }
+        }
+
+        // Both flanking days must exist in range and both must be Absent
+        $before = $i - 1;
+        $after  = $j + 1;
+        if (!$worked && $before >= 0 && $after < $n
+            && $results[$dates[$before]]['status'] === 'Absent'
+            && $results[$dates[$after]]['status']  === 'Absent') {
+
+            $prevDay = date('D', strtotime($dates[$before]));
+            $nextDay = date('D', strtotime($dates[$after]));
+            for ($k = $i; $k <= $j; $k++) {
+                $results[$dates[$k]] = [
+                    'status' => 'Absent',
+                    'credit' => 0.0,
+                    'hours'  => 0.0,
+                    'note'   => "Sandwich leave - absent on $prevDay and $nextDay, so this week off is not paid",
+                ];
+            }
+        }
+
+        $i = $j; // skip past the block we just examined
+    }
+}
+
+/**
+ * Derived status for every day in a range, for one employee.
+ *
+ * This is the function every screen, export, API and payslip calls. It runs the
+ * per-day evaluation over a padded range so the sandwich rule can see the days
+ * just outside the window, then returns only the dates that were asked for.
+ *
+ * @return array<string,array{status:string,credit:float,hours:float,note:string}> keyed by Y-m-d
+ */
+function attendance_day_results(mysqli $conn, int $user_id, string $start, string $end): array
+{
+    $policy = attendance_policy($conn);
+
+    if (!$policy['sandwich_absent']) {
+        return attendance_base_day_results($conn, $user_id, $start, $end);
+    }
+
+    // A week off sitting on the edge of the window still needs the day either
+    // side of it to be judged, so widen the range and trim back afterwards.
+    $padStart = date('Y-m-d', strtotime($start . ' -7 days'));
+    $padEnd   = date('Y-m-d', strtotime($end . ' +7 days'));
+
+    $padded = attendance_base_day_results($conn, $user_id, $padStart, $padEnd);
+    attendance_apply_sandwich_rule($padded);
+
+    $results = [];
+    for ($ts = strtotime($start); $ts <= strtotime($end); $ts = strtotime('+1 day', $ts)) {
+        $date = date('Y-m-d', $ts);
+        if (isset($padded[$date])) {
+            $results[$date] = $padded[$date];
+        }
+    }
     return $results;
 }
 
@@ -272,6 +410,7 @@ function attendance_status_badge(string $status): string
         case 'Present':  return 'bg-success';
         case 'Half Day': return 'bg-warning text-dark';
         case 'Week Off': return 'bg-info';
+        case 'Holiday':  return 'bg-info text-dark';
         case 'Leave':    return 'bg-primary';
         case 'OD':       return 'bg-secondary';
         case 'Comp Off': return 'bg-secondary';

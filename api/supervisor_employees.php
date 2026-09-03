@@ -1,8 +1,8 @@
 <?php
 /**
- * The employees a supervisor may punch for - everyone still working at their
- * location - each with today's punch state so the app can render its search
- * list and the correct button in one call.
+ * The employees a supervisor may punch for - everyone still working who is
+ * allocated to their project - each with today's punch state so the app can
+ * render its search list and the correct button in one call.
  *
  * GET (no parameters)
  * Auth: Bearer token from auth/api_login.php, belonging to a supervisor.
@@ -26,12 +26,15 @@ $supervisor_id = (int)$authUser['id'];
 $location = supervisor_location($conn, $supervisor_id);
 
 if ($location === null) {
-    echo json_encode(['success' => false, 'message' => 'No location is assigned to your supervisor account. Ask an admin to set one.']);
+    echo json_encode(['success' => false, 'message' => 'No project is assigned to your supervisor account. Ask an admin to allocate you to one.']);
     exit;
 }
 
 echo json_encode([
     'success'   => true,
+    'project'   => $location,
+    // Kept so an app build already reading `location` keeps working; both
+    // carry the same value and `project` is the one to use from now on.
     'location'  => $location,
     'date'      => attendance_shift_date(),
     'employees' => supervisor_employee_list($conn, $location),

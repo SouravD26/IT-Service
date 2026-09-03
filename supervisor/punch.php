@@ -29,7 +29,7 @@ $supervisor_id = (int)$_SESSION['user_id'];
 $location = supervisor_location($conn, $supervisor_id);
 
 if ($location === null) {
-    echo json_encode(['success' => false, 'message' => 'No location is assigned to your supervisor account. Ask an admin to set one.']);
+    echo json_encode(['success' => false, 'message' => 'No project is assigned to your supervisor account. Ask an admin to allocate you to one.']);
     exit;
 }
 

@@ -40,6 +40,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_policy'])) {
     $half_day_min_hours   = (float)($_POST['half_day_min_hours'] ?? 5);
     $full_day_basis       = ($_POST['full_day_basis'] ?? 'shift') === 'fixed' ? 'fixed' : 'shift';
     $full_day_fixed_hours = (float)($_POST['full_day_fixed_hours'] ?? 8);
+    $sandwich_absent      = isset($_POST['sandwich_absent']) ? 1 : 0;
 
     if ($half_day_min_hours <= 0 || $half_day_min_hours > 24) {
         $message = "Half day minimum hours must be between 0 and 24";
@@ -53,10 +54,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_policy'])) {
     } else {
         $stmt = $conn->prepare(
             "UPDATE attendance_policy
-             SET single_punch_absent=?, half_day_min_hours=?, full_day_basis=?, full_day_fixed_hours=?
+             SET single_punch_absent=?, half_day_min_hours=?, full_day_basis=?, full_day_fixed_hours=?, sandwich_absent=?
              WHERE id = 1"
         );
-        $stmt->bind_param("idsd", $single_punch_absent, $half_day_min_hours, $full_day_basis, $full_day_fixed_hours);
+        $stmt->bind_param("idsdi", $single_punch_absent, $half_day_min_hours, $full_day_basis, $full_day_fixed_hours, $sandwich_absent);
         $stmt->execute();
         $stmt->close();
 
@@ -181,6 +182,29 @@ ksort($shift_lengths);
                 </div>
             </div>
 
+            <!-- Rule 3 -->
+            <div class="card rule-card shadow-sm mb-3">
+                <div class="card-body">
+                    <h5 class="card-title">3. Sandwich leave</h5>
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" role="switch"
+                               id="sandwich" name="sandwich_absent" value="1"
+                               <?php echo $policy['sandwich_absent'] ? 'checked' : ''; ?>>
+                        <label class="form-check-label" for="sandwich">
+                            Mark a week off <strong>Absent</strong> when the employee is absent both the day
+                            before and the day after it
+                        </label>
+                    </div>
+                    <div class="form-text mt-2">
+                        For the usual Sunday week off this means <strong>absent Saturday + absent Monday
+                        makes the Sunday absent too</strong>, costing 3 days instead of 2. A week off is only
+                        paid when the employee actually worked around it.
+                        Approved leave, on duty and comp off on either side never trigger this — only a real
+                        Absent does. Two week offs in a row are treated as one block.
+                    </div>
+                </div>
+            </div>
+
             <!-- What this means -->
             <div class="card shadow-sm mb-4">
                 <div class="card-header bg-light fw-bold">What an employee earns</div>
@@ -195,6 +219,7 @@ ksort($shift_lengths);
                             <tr><td>Worked at least <span class="policy-half"><?php echo $policy['half_day_min_hours']; ?></span> hours but under a full shift</td><td><span class="badge bg-warning text-dark">Half Day</span></td><td class="text-end">0.5 day</td></tr>
                             <tr><td>Worked a full shift or more</td><td><span class="badge bg-success">Present</span></td><td class="text-end">1 day</td></tr>
                             <tr><td>Week off, approved paid leave, on duty, comp off</td><td><span class="badge bg-info">Paid</span></td><td class="text-end">1 day</td></tr>
+                            <tr><td>Week off with an Absent on both sides <span class="text-muted">(sandwich)</span></td><td><span class="badge bg-danger">Absent</span></td><td class="text-end">0 day</td></tr>
                         </tbody>
                     </table>
                 </div>
