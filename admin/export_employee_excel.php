@@ -13,6 +13,8 @@ use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
 
 // Bank + salary columns shared by every attendance export
 require_once __DIR__ . '/../config/export_salary_columns.php';
+// Create them if this export is the first page opened after a deploy
+export_salary_ensure_columns($conn);
 
 // Authentication check
 if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION['role'] !== 'suparadmin')) {

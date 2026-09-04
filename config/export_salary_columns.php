@@ -20,6 +20,34 @@ use PhpOffice\PhpSpreadsheet\Style\Alignment;
 const EXPORT_SALARY_HEADINGS = ['BANK NAME', 'IFSC CODE', 'ACCOUNT NUMBER', 'SALARY AMOUNT'];
 
 /**
+ * Makes sure the bank columns exist before an export SELECTs them.
+ *
+ * admin/employees.php creates them, but an export can easily be the first page
+ * opened after a deploy. Without this the SELECT fails with "Unknown column"
+ * and the whole download 500s, so every export calls this first.
+ */
+function export_salary_ensure_columns(mysqli $conn): void
+{
+    static $done = false;
+    if ($done) {
+        return;
+    }
+    $done = true;
+
+    $needed = [
+        'bank_name'           => 'VARCHAR(100)',
+        'bank_ifsc_code'      => 'VARCHAR(15)',
+        'bank_account_number' => 'VARCHAR(30)',
+    ];
+    foreach ($needed as $col => $type) {
+        $res = $conn->query("SHOW COLUMNS FROM users LIKE '$col'");
+        if ($res && $res->num_rows === 0) {
+            $conn->query("ALTER TABLE users ADD COLUMN $col $type NULL");
+        }
+    }
+}
+
+/**
  * The 1-based column index the extra block starts at.
  *
  * @param int $num_dates how many date columns the sheet has
