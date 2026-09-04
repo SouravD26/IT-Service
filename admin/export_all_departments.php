@@ -17,6 +17,10 @@ use PhpOffice\PhpSpreadsheet\Style\Border;
 use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
 
 // Bank + salary columns shared by every attendance export
+// Report a crash as a readable message rather than a blank 500
+require_once __DIR__ . '/../config/export_errors.php';
+export_report_errors('export_all_departments.php');
+
 require_once __DIR__ . '/../config/export_salary_columns.php';
 // Create them if this export is the first page opened after a deploy
 export_salary_ensure_columns($conn);

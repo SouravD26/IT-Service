@@ -39,6 +39,32 @@ function attendance_ensure_policy_table(mysqli $conn): void
     }
 }
 
+/**
+ * Creates leave_applications on first use.
+ *
+ * admin/salary_slip.php builds it, but attendance_base_day_results() reads it
+ * from exports and APIs that may run before that page is ever opened. A
+ * missing table would abort the whole request, so create it here too.
+ */
+function attendance_ensure_leave_table(mysqli $conn): void
+{
+    static $done = false;
+    if ($done) {
+        return;
+    }
+    $done = true;
+
+    $conn->query("CREATE TABLE IF NOT EXISTS leave_applications (
+        id INT PRIMARY KEY AUTO_INCREMENT,
+        user_id INT NOT NULL,
+        leave_type ENUM('Casual Leave','Sick Leave','Earned Leave','Maternity Leave','Paternity Leave','Unpaid Leave') NOT NULL,
+        start_date DATE NOT NULL, end_date DATE NOT NULL, days_count INT NOT NULL DEFAULT 1,
+        reason TEXT, status ENUM('Pending','Approved','Rejected') DEFAULT 'Pending',
+        admin_notes TEXT, reviewed_by INT, reviewed_at TIMESTAMP NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )");
+}
+
 /** The current policy, read once per request. */
 function attendance_policy(mysqli $conn): array
 {
@@ -208,6 +234,7 @@ function attendance_base_day_results(mysqli $conn, int $user_id, string $start, 
     $cst->close();
 
     $paidLeaveDates = [];
+    attendance_ensure_leave_table($conn);
     $lst = $conn->prepare("SELECT leave_type, start_date, end_date FROM leave_applications WHERE user_id=? AND status='Approved' AND start_date <= ? AND end_date >= ?");
     $lst->bind_param("iss", $user_id, $end, $start);
     $lst->execute();
@@ -338,10 +365,19 @@ function attendance_apply_sandwich_rule(array &$results): void
  */
 function attendance_day_results(mysqli $conn, int $user_id, string $start, string $end): array
 {
+    // The full-company export asks for the same employee and range twice (paid
+    // days, then extra duty), and each call is half a dozen queries, so the
+    // answer is remembered for the rest of the request.
+    static $cache = [];
+    $cacheKey = $user_id . '|' . $start . '|' . $end;
+    if (isset($cache[$cacheKey])) {
+        return $cache[$cacheKey];
+    }
+
     $policy = attendance_policy($conn);
 
     if (!$policy['sandwich_absent']) {
-        return attendance_base_day_results($conn, $user_id, $start, $end);
+        return $cache[$cacheKey] = attendance_base_day_results($conn, $user_id, $start, $end);
     }
 
     // A week off sitting on the edge of the window still needs the day either
@@ -359,7 +395,7 @@ function attendance_day_results(mysqli $conn, int $user_id, string $start, strin
             $results[$date] = $padded[$date];
         }
     }
-    return $results;
+    return $cache[$cacheKey] = $results;
 }
 
 /**

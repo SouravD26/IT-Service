@@ -59,8 +59,47 @@ function salary_extra_duty(mysqli $conn, int $user_id, string $start, string $en
  *   net_pay:float, days_in_period:int, period_label:string, has_structure:bool
  * }
  */
+/**
+ * Creates salary_structures if it is missing.
+ *
+ * admin/employees.php builds the table, but an export or a payslip can easily
+ * be the first page opened after a deploy. Without the table the SELECT below
+ * fails and, with mysqli throwing on PHP 8.1+, the whole download dies as a
+ * blank HTTP 500. Same guard as export_salary_ensure_columns() in
+ * config/export_salary_columns.php.
+ */
+function salary_summary_ensure_table(mysqli $conn): void
+{
+    static $done = false;
+    if ($done) {
+        return;
+    }
+    $done = true;
+
+    $conn->query("CREATE TABLE IF NOT EXISTS salary_structures (
+        id                        INT PRIMARY KEY AUTO_INCREMENT,
+        user_id                   INT NOT NULL,
+        template                  VARCHAR(50)    DEFAULT 'Monthly',
+        statutory_component       VARCHAR(100),
+        effective_cycle           VARCHAR(20),
+        salary_ctc                DECIMAL(12,2)  DEFAULT 0,
+        basic_monthly             DECIMAL(12,2)  DEFAULT 0,
+        special_allowance_monthly DECIMAL(12,2)  DEFAULT 0,
+        pf_monthly                DECIMAL(12,2)  DEFAULT 0,
+        esi_monthly               DECIMAL(12,2)  DEFAULT 0,
+        pf_calc                   VARCHAR(100),
+        esi_calc                  VARCHAR(100),
+        custom_components         TEXT,
+        created_at                TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at                TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )");
+}
+
 function salary_month_summary(mysqli $conn, int $user_id, string $month): array
 {
+    salary_summary_ensure_table($conn);
+
     $stmt = $conn->prepare("
         SELECT s.id AS structure_id,
                COALESCE(s.basic_monthly, 0) basic_monthly,
