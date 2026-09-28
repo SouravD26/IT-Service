@@ -14,7 +14,7 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION[
 }
 
 // Maximum number of employees admin/suparadmin are allowed to add. Raise this value if a higher limit is ever needed.
-define('MAX_EMPLOYEES_LIMIT', 60);
+define('MAX_EMPLOYEES_LIMIT', 71);
 
 // Make sure every column the Excel format maps to actually exists
 $columns_to_add = [

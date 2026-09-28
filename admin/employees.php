@@ -10,7 +10,7 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION[
 }
 
 // Maximum number of employees admin/suparadmin are allowed to add. Raise this value if a higher limit is ever needed.
-define('MAX_EMPLOYEES_LIMIT', 60);
+define('MAX_EMPLOYEES_LIMIT', 71);
 
 // Determine dashboard to return to based on 'from' parameter or user role
 $from = isset($_GET['from']) ? htmlspecialchars($_GET['from']) : '';
