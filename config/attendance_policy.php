@@ -111,12 +111,33 @@ function attendance_shift_hours(?string $shift_time): ?float
  */
 function attendance_full_day_hours(array $policy, ?string $shift_time): float
 {
-    if ($policy['full_day_basis'] === 'fixed') {
-        return $policy['full_day_fixed_hours'];
+    // Company rule: 8 worked hours are mandatory for a full day
+    return ATTENDANCE_MANDATORY_HOURS;
+}
+
+/** Default duty hours: 9:30 AM - 6:00 PM, with a 30 minute grace on arrival. */
+const ATTENDANCE_DUTY_START      = '09:30';
+const ATTENDANCE_DUTY_END        = '18:00';
+const ATTENDANCE_GRACE_MINUTES   = 30;
+const ATTENDANCE_MANDATORY_HOURS = 8.0;
+
+/** True when the first punch in of the day is after duty start + grace (10:00 AM). */
+function attendance_is_late(array $sessions): bool
+{
+    $first = null;
+    foreach ($sessions as $s) {
+        if (!empty($s['punch_in'])) {
+            $t = date('H:i', strtotime($s['punch_in']));
+            if ($first === null || $t < $first) {
+                $first = $t;
+            }
+        }
     }
-    $shift = attendance_shift_hours($shift_time);
-    // No usable shift on the employee - fall back to the fixed value
-    return $shift ?? $policy['full_day_fixed_hours'];
+    if ($first === null) {
+        return false;
+    }
+    $limit = date('H:i', strtotime(ATTENDANCE_DUTY_START) + ATTENDANCE_GRACE_MINUTES * 60);
+    return $first > $limit;
 }
 
 /**
@@ -164,8 +185,14 @@ function attendance_evaluate_day(array $sessions, array $policy, float $fullDayH
 
     $note = $dangling > 0 ? "{$hours}h worked (an unclosed session was ignored)" : "{$hours}h worked";
 
-    // Rule 2: full shift = full day, at least the half-day minimum = half day
-    if ($hours >= $fullDayHours) {
+    // Arriving after 9:30 AM + 30 min grace can earn at most a half day
+    $late = attendance_is_late($sessions);
+    if ($late) {
+        $note .= ' - late arrival (after grace period)';
+    }
+
+    // Rule 2: 8 mandatory hours = full day, at least the half-day minimum = half day
+    if ($hours >= $fullDayHours && !$late) {
         return ['status' => 'Present', 'credit' => 1.0, 'hours' => $hours, 'note' => $note];
     }
     if ($hours >= $policy['half_day_min_hours']) {
